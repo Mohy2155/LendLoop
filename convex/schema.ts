@@ -15,7 +15,7 @@ export default defineSchema({
     category: categoryValidator,
     condition: conditionValidator,
     description: v.string(),
-  }).index("by_owner", ["ownerId"]),
+  }).index("by_owner", ["ownerId"]).index("by_category", ["category"]),
 
   // Single row; hands out the number in "Neighbor N" for users who have no name.
   neighborCounter: defineTable({ next: v.number() }),

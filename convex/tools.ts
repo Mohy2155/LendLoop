@@ -1,6 +1,8 @@
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/access";
+import { safePaging } from "./lib/paging";
 import {
   categoryValidator,
   conditionValidator,
@@ -93,5 +95,39 @@ export const remove = mutation({
     if (!tool) throw new ConvexError({ code: "NOT_FOUND" });
     if (tool.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
     await ctx.db.delete("tools", id);
+  },
+});
+
+// Reads of the whole board. Each builds its items field by field, never from the row itself,
+// so a field added to `tools` later is not exposed by accident.
+
+/** Open to anyone, including signed-out visitors: name and category only. */
+export const listPublic = query({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(v.object({ name: v.string(), category: categoryValidator })),
+  handler: async (ctx, { paginationOpts }) => {
+    const result = await ctx.db.query("tools").order("desc").paginate(safePaging(paginationOpts));
+    return { ...result, page: result.page.map(({ name, category }) => ({ name, category })) };
+  },
+});
+
+export const listAll = query({
+  args: { paginationOpts: paginationOptsValidator, category: v.optional(categoryValidator) },
+  handler: async (ctx, { paginationOpts, category }) => {
+    await requireUser(ctx);
+    const tools = category
+      ? ctx.db.query("tools").withIndex("by_category", (q) => q.eq("category", category))
+      : ctx.db.query("tools");
+    const result = await tools.order("desc").paginate(safePaging(paginationOpts));
+    return {
+      ...result,
+      page: result.page.map(({ _id, name, category, condition, description }) => ({
+        _id,
+        name,
+        category,
+        condition,
+        description,
+      })),
+    };
   },
 });

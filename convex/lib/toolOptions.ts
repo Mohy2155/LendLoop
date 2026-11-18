@@ -19,6 +19,7 @@ export const conditionValidator = v.union(
 );
 
 export const CATEGORIES = categoryValidator.members.map((m) => m.value);
+export type Category = (typeof CATEGORIES)[number];
 export const CONDITIONS = conditionValidator.members.map((m) => m.value);
 
 export const NAME_MAX = 60;

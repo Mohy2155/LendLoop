@@ -1,5 +1,6 @@
 import { HomeCta } from "@/components/home-cta";
 import { Main } from "@/components/main";
+import { PublicToolList } from "@/components/tool-board";
 
 export default function Home() {
   return (
@@ -13,6 +14,12 @@ export default function Home() {
           borrow what they need for a few days.
         </p>
         <HomeCta />
+        <section aria-labelledby="board-heading" className="mt-16">
+          <h2 id="board-heading" className="text-2xl font-semibold">
+            On the board
+          </h2>
+          <PublicToolList />
+        </section>
       </div>
     </Main>
   );
