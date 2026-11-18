@@ -4,7 +4,7 @@
 
 LendLoop is a neighborhood tool-lending board. Neighbors list tools they are happy to lend, ask to borrow from each other for a date range, and get automated notifications and reminders through n8n.
 
-> **Status:** work in progress. The app shell (layout, sign-in, route protection) and user accounts with roles are done, neighbors can list their own tools on the My listings page, and the board of tools is browsable (a public list on the home page, a category-filtered list for signed-in users). Borrow requests and the n8n workflows are being added one change at a time; the sections below describe what exists today and are extended as each part lands.
+> **Status:** work in progress. The app shell (layout, sign-in, route protection) and user accounts with roles are done, neighbors can list their own tools on the My listings page, and the board of tools is browsable (a public list on the home page, a category-filtered list for signed-in users). Neighbors can ask to borrow a tool for a date range and owners approve or decline (My requests, Incoming requests). The n8n workflows are being added one change at a time; the sections below describe what exists today and are extended as each part lands.
 
 ## Stack
 
@@ -85,7 +85,7 @@ Browser ── Next.js (App Router)
 ```
 
 - **Public pages:** `/` (with a read-only list of tool names and categories), `/sign-in`, `/sign-up`.
-- **Signed-in pages** (`src/app/(app)`): `/tools`, `/my-listings`, `/my-requests`, `/incoming-requests`. Tools and My listings are built; the other pages currently render labelled placeholders that later changes replace.
+- **Signed-in pages** (`src/app/(app)`): `/tools`, `/my-listings`, `/my-requests`, `/incoming-requests`. Tools, My listings, My requests and Incoming requests are built.
 - **Navigation** lives in one list, `src/lib/nav.ts`. A new signed-in page is a file under `src/app/(app)/` plus one entry in that list; the layout is not edited.
 
 ## Design and security decisions
@@ -97,8 +97,9 @@ The reasoning behind each choice is in [`docs/design-decisions.md`](docs/design-
 - **Users and roles live in Convex.** On first sign-in the app creates a profile (display name and role only; no email or other contact details). The role is read from the database on every call, never from the sign-in token, so changing it takes effect immediately. Shared checks in `convex/lib/access.ts` (`requireUser`, `requireAdmin`) sit at the start of every protected function.
 - **New public functions must declare their access.** A test lists every public Convex function and fails if one is added without an entry, with undeclared arguments, or with a `role` argument.
 - **Tools belong to their creator.** Creating, editing and deleting a tool, and listing your own tools, are Convex functions (`convex/tools.ts`) that check who is calling; only the owner can change or delete a tool, and the admin role adds nothing to that. A user can own at most 50 tools. Category and condition are fixed lists in `convex/lib/toolOptions.ts`.
-- **The public tool list exposes name and category only.** It is a separate anonymous Convex query (`tools.listPublic`) that builds each item field by field, with no owner, id, condition or description, and its return type is checked at runtime. Paging cursors are opaque tokens issued by Convex. Tool names are text neighbors type and become public, and visitors can see when tools appear or disappear. Signed-in users get a second query (`tools.listAll`) with condition and description but still no owner details, and an optional category filter.
-- **Lists are paged and bounded.** Both lists page 24 tools at a time, and a single page never reads more than 48 rows, whatever paging options a client sends. The server ignores a client's own row and byte limits, and an end cursor cannot widen a page to every tool.
+- **The public tool list exposes name and category only, and hides tools on loan today.** It is a separate anonymous Convex query (`tools.listPublic`) that builds each item field by field, with no owner, id, condition or description, and its return type is checked at runtime. Paging cursors are opaque tokens issued by Convex. Tool names are text neighbors type and become public, and visitors can see when tools appear or disappear. Signed-in users get a second query (`tools.listAll`) with condition and description but still no owner details, and an optional category filter.
+- **Lists are paged and bounded.** Both lists page 24 tools at a time, and a single page never reads more than 48 tool rows, whatever paging options a client sends. The signed-in tool list also reads each listed tool's approved requests to work out "on loan today". The server ignores a client's own row and byte limits, and an end cursor cannot widen a page to every tool.
+- **Borrow requests follow the brief and nothing more.** A request is for one tool and a date range and starts pending; only the tool's owner can approve or decline it (an admin who is not the owner cannot), and each person sees only their own requests. An approved request is the loan, and the Tools list shows whether a tool is on loan today (by the server's UTC date). Not restricted yet, because the brief does not ask for it: overlapping approved requests, cancelling, requesting your own tool, and deleting a tool that has requests.
 - **No secrets in the repository.** Keys live in `.env.local` and in Convex and n8n environment settings; `.env.example` holds names only.
 
 ## Production notes

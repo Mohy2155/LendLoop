@@ -11,6 +11,7 @@
 import type * as lib_access from "../lib/access.js";
 import type * as lib_paging from "../lib/paging.js";
 import type * as lib_toolOptions from "../lib/toolOptions.js";
+import type * as requests from "../requests.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   "lib/access": typeof lib_access;
   "lib/paging": typeof lib_paging;
   "lib/toolOptions": typeof lib_toolOptions;
+  requests: typeof requests;
   tools: typeof tools;
   users: typeof users;
 }>;
