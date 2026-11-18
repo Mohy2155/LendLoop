@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { SignInButton, useAuth } from "@clerk/nextjs";
 import { useConvexAuth } from "convex/react";
 import { primaryButton, quietButton } from "@/components/button-styles";
+import { useProfile } from "@/components/viewer-provider";
 
 /** How long "Clerk signed in, Convex not yet authenticated" may last before it is reported as broken. */
 const BACKEND_AUTH_GRACE_MS = 10_000;
@@ -38,6 +39,7 @@ function useGateState(): GateState {
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const state = useGateState();
+  const profile = useProfile();
 
   useEffect(() => {
     if (state === "backend-error") {
@@ -50,7 +52,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   switch (state) {
     case "authenticated":
-      return <>{children}</>;
+      // A loaded profile means ready, even if a name refresh failed for a returning user.
+      if (profile.viewer) return <>{children}</>;
+      return profile.failed ? <ProfileError retry={profile.retry} /> : <GateSkeleton />;
     case "signed-out":
       return <SignInPrompt />;
     case "backend-error":
@@ -95,6 +99,18 @@ function BackendError() {
         onClick={() => window.location.reload()}
       >
         Reload page
+      </button>
+    </div>
+  );
+}
+
+function ProfileError({ retry }: { retry: () => void }) {
+  return (
+    <div role="alert" className="my-6 rounded-md border border-border bg-surface p-4">
+      <p className="font-semibold">We could not set up your profile.</p>
+      <p className="mt-1 text-muted">Try again in a moment.</p>
+      <button type="button" className={`${quietButton} mt-3`} onClick={retry}>
+        Try again
       </button>
     </div>
   );
