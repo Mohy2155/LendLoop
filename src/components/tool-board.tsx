@@ -7,8 +7,9 @@ import { api } from "../../convex/_generated/api";
 import { PAGE_SIZE } from "../../convex/lib/paging";
 import { CATEGORIES, type Category } from "../../convex/lib/toolOptions";
 import { quietButton } from "./button-styles";
+import { RequestForm } from "./requests";
 
-function Loading() {
+export function Loading() {
   return (
     <div aria-hidden="true" className="mt-6 space-y-3">
       <div className="h-16 rounded-md border border-border bg-surface" />
@@ -28,7 +29,7 @@ function Announce({ status, count, empty }: { status: PaginationStatus; count: n
   );
 }
 
-function Empty({ text }: { text: string }) {
+export function Empty({ text }: { text: string }) {
   return (
     <div className="mt-6 rounded-md border border-dashed border-border p-6">
       <p className="font-medium">{text}</p>
@@ -40,7 +41,15 @@ function Empty({ text }: { text: string }) {
  * The "Load more" button, which becomes an end-of-list line. If the button had focus when the last
  * page arrived, focus moves to that line so keyboard users are not dropped on the page body.
  */
-function LoadMore({ status, loadMore }: { status: PaginationStatus; loadMore: () => void }) {
+export function LoadMore({
+  status,
+  loadMore,
+  end: endText = "That is every tool on the board.",
+}: {
+  status: PaginationStatus;
+  loadMore: () => void;
+  end?: string;
+}) {
   const end = useRef<HTMLParagraphElement>(null);
   const activated = useRef(false);
 
@@ -56,7 +65,7 @@ function LoadMore({ status, loadMore }: { status: PaginationStatus; loadMore: ()
     <div className="mt-6">
       {status === "Exhausted" ? (
         <p ref={end} tabIndex={-1} className="text-sm text-muted outline-none">
-          That is every tool on the board.
+          {endText}
         </p>
       ) : (
         <button
@@ -76,12 +85,13 @@ function LoadMore({ status, loadMore }: { status: PaginationStatus; loadMore: ()
   );
 }
 
-const pill = "rounded-full border border-border px-2";
+export const pill = "rounded-full border border-border px-2";
 
 function PublicList() {
   const { results, status, loadMore } = usePaginatedQuery(api.tools.listPublic, {}, { initialNumItems: PAGE_SIZE });
   const none = "No tools have been listed yet.";
-  if (status === "LoadingFirstPage" || results.length === 0)
+  // A page can be empty while more remain (its tools were on loan), so "empty" means exhausted.
+  if (status === "LoadingFirstPage" || (results.length === 0 && status === "Exhausted"))
     return (
       <>
         <Announce status={status} count={results.length} empty={none} />
@@ -178,8 +188,10 @@ export function AllTools() {
                     <span className="sr-only">Condition: </span>
                     {tool.condition}
                   </span>
+                  <span className={pill}>{tool.onLoan ? "On loan today" : "Available"}</span>
                 </p>
                 <p className="mt-2 break-words">{tool.description}</p>
+                <RequestForm toolId={tool._id} toolName={tool.name} />
               </li>
             ))}
           </ul>

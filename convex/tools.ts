@@ -1,6 +1,7 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { requireUser } from "./lib/access";
 import { safePaging } from "./lib/paging";
 import {
@@ -98,16 +99,34 @@ export const remove = mutation({
   },
 });
 
+/**
+ * True when an approved request for the tool includes `today` (YYYY-MM-DD, UTC).
+ * shortcut: reads all of the tool's approved requests; fine until a tool has thousands.
+ */
+async function onLoanToday(ctx: QueryCtx, toolId: Id<"tools">, today: string) {
+  const approved = await ctx.db
+    .query("requests")
+    .withIndex("by_tool_status", (q) => q.eq("toolId", toolId).eq("status", "approved"))
+    .collect();
+  return approved.some((r) => r.startDate <= today && today <= r.endDate);
+}
+
 // Reads of the whole board. Each builds its items field by field, never from the row itself,
 // so a field added to `tools` later is not exposed by accident.
 
-/** Open to anyone, including signed-out visitors: name and category only. */
+/** Open to anyone, including signed-out visitors: name and category only, tools not on loan today. */
 export const listPublic = query({
   args: { paginationOpts: paginationOptsValidator },
   returns: paginationResultValidator(v.object({ name: v.string(), category: categoryValidator })),
   handler: async (ctx, { paginationOpts }) => {
     const result = await ctx.db.query("tools").order("desc").paginate(safePaging(paginationOpts));
-    return { ...result, page: result.page.map(({ name, category }) => ({ name, category })) };
+    const today = new Date().toISOString().slice(0, 10);
+    // A page can come back shorter than requested (or empty) when some of its tools are on loan.
+    const loans = await Promise.all(result.page.map((tool) => onLoanToday(ctx, tool._id, today)));
+    return {
+      ...result,
+      page: result.page.filter((_, i) => !loans[i]).map(({ name, category }) => ({ name, category })),
+    };
   },
 });
 
@@ -119,15 +138,18 @@ export const listAll = query({
       ? ctx.db.query("tools").withIndex("by_category", (q) => q.eq("category", category))
       : ctx.db.query("tools");
     const result = await tools.order("desc").paginate(safePaging(paginationOpts));
-    return {
-      ...result,
-      page: result.page.map(({ _id, name, category, condition, description }) => ({
+    // shortcut: uses the server's UTC date; not refreshed until the query re-runs.
+    const today = new Date().toISOString().slice(0, 10);
+    const page = await Promise.all(
+      result.page.map(async ({ _id, name, category, condition, description }) => ({
         _id,
         name,
         category,
         condition,
         description,
+        onLoan: await onLoanToday(ctx, _id, today),
       })),
-    };
+    );
+    return { ...result, page };
   },
 });
