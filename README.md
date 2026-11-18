@@ -4,7 +4,7 @@
 
 LendLoop is a neighborhood tool-lending board. Neighbors list tools they are happy to lend, ask to borrow from each other for a date range, and get automated notifications and reminders through n8n.
 
-> **Status:** work in progress. The app shell (layout, sign-in, route protection) and user accounts with roles are done. Listings, borrow requests and the n8n workflows are being added one change at a time; the sections below describe what exists today and are extended as each part lands.
+> **Status:** work in progress. The app shell (layout, sign-in, route protection) and user accounts with roles are done, and neighbors can list their own tools on the My listings page. The public board, borrow requests and the n8n workflows are being added one change at a time; the sections below describe what exists today and are extended as each part lands.
 
 ## Stack
 
@@ -81,10 +81,11 @@ Browser ── Next.js (App Router)
             │  ClerkProvider ─ sign-in / sign-up / session
             └─ ConvexProviderWithClerk ──► Convex (data + functions)
                                            validates the Clerk token, enforces access rules
+                                           tables: users, tools, neighborCounter
 ```
 
 - **Public pages:** `/`, `/sign-in`, `/sign-up`.
-- **Signed-in pages** (`src/app/(app)`): `/tools`, `/my-listings`, `/my-requests`, `/incoming-requests`. They currently render labelled placeholders that later changes replace.
+- **Signed-in pages** (`src/app/(app)`): `/tools`, `/my-listings`, `/my-requests`, `/incoming-requests`. My listings is built; the other pages currently render labelled placeholders that later changes replace.
 - **Navigation** lives in one list, `src/lib/nav.ts`. A new signed-in page is a file under `src/app/(app)/` plus one entry in that list; the layout is not edited.
 
 ## Design and security decisions
@@ -95,6 +96,7 @@ The reasoning behind each choice is in [`docs/design-decisions.md`](docs/design-
 - **Auth state is waited for before data is requested.** A gate component distinguishes loading, signed in, signed out, and "signed in to Clerk but the backend rejected the session", so a broken integration is shown as an error and not as a sign-in loop.
 - **Users and roles live in Convex.** On first sign-in the app creates a profile (display name and role only; no email or other contact details). The role is read from the database on every call, never from the sign-in token, so changing it takes effect immediately. Shared checks in `convex/lib/access.ts` (`requireUser`, `requireAdmin`) sit at the start of every protected function.
 - **New public functions must declare their access.** A test lists every public Convex function and fails if one is added without an entry, with undeclared arguments, or with a `role` argument.
+- **Tools belong to their creator.** Creating, editing and deleting a tool, and listing your own tools, are Convex functions (`convex/tools.ts`) that check who is calling; only the owner can change or delete a tool, and the admin role adds nothing to that. A user can own at most 50 tools. Category and condition are fixed lists in `convex/lib/toolOptions.ts`.
 - **No secrets in the repository.** Keys live in `.env.local` and in Convex and n8n environment settings; `.env.example` holds names only.
 
 ## Production notes
