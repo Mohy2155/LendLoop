@@ -42,3 +42,33 @@ The header's auth controls use Clerk's client-side `Show` inside a fixed-size sl
 ### Out of scope for the shell
 
 No data model, roles, or Convex functions. Those arrive with listings, requests and roles, each stating which Convex function enforces which rule.
+
+## Users and roles
+
+### Profile in Convex, created on first sign-in
+
+A signed-in user gets one profile (`users` table: identity, display name, role), created by the `users.ensureUser` mutation the first time the signed-in app loads and keyed by Clerk's issuer-plus-subject identifier. The mutation takes no input, so a client cannot choose its role or name. A Clerk webhook would also work but needs a public URL and a signing secret; it is a possible later improvement, and it would also handle accounts deleted in Clerk. Moving to a new Clerk instance (for example production) creates new profiles, so admins must be set again there.
+
+### Display names
+
+The name comes from a claim in Clerk's session token (see the setup step in the README); the profile refreshes it whenever the user next opens the app and the name changed. A user without a name is called "Neighbor N", where N comes from a counter that never repeats a number. Email addresses are not stored; a later change adds one only if a feature needs it.
+
+### Roles are enforced in the backend, from the database
+
+The role is read from the stored profile on every call, not from the token, so a demoted admin loses access on their next call. Shared helpers return distinct errors (`NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`) that describe only the caller. The interface only mirrors these rules.
+
+### Admin is set by hand
+
+There is a single administrator and the brief does not call for a promotion flow, so no code grants admin: the owner edits the `role` field in the Convex dashboard. No public function accepts a role.
+
+### Guarding against a forgotten check
+
+A test loads every deployed Convex module, lists the public functions and compares them with an allowlist kept in the test. A new public function without an entry, without declared arguments, or with a `role` argument fails `npm run check`. The list records the intended check; each function's own tests prove it is applied.
+
+### The gate waits for the profile
+
+The signed-in layout creates and loads the profile once per Clerk session, so page-to-page navigation does not repeat it. Pages show their data only when the profile exists. If creating it fails, the page shows a retry; a returning user whose profile is already loaded is never blocked by a failed name refresh.
+
+### Test tooling
+
+Convex functions are tested with Vitest and `convex-test`. Vitest 4 is used because Vitest 5 needs newer Node type definitions than the project has, and adding it to the project needed `--legacy-peer-deps` once because of an npm resolver bug with its optional peers. The lockfile records the result, so a plain `npm install` works.

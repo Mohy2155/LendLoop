@@ -4,7 +4,7 @@
 
 LendLoop is a neighborhood tool-lending board. Neighbors list tools they are happy to lend, ask to borrow from each other for a date range, and get automated notifications and reminders through n8n.
 
-> **Status:** work in progress. The app shell (layout, sign-in, route protection) is done. Listings, borrow requests, roles and the n8n workflows are being added one change at a time; the sections below describe what exists today and are extended as each part lands.
+> **Status:** work in progress. The app shell (layout, sign-in, route protection) and user accounts with roles are done. Listings, borrow requests and the n8n workflows are being added one change at a time; the sections below describe what exists today and are extended as each part lands.
 
 ## Stack
 
@@ -27,6 +27,7 @@ Requirements: Node.js 20.9 or newer and npm.
 
 2. Create a [Clerk](https://clerk.com) application (development instance). Copy `.env.example` to `.env.local` and fill in the Clerk keys.
 3. In the Clerk dashboard open **Integrations → Convex** and activate it. Note the **Frontend API URL** it shows (it looks like `https://<name>.clerk.accounts.dev`).
+   Then make the user's name available to the backend: under **Sessions → Customize session token** add the claim `"name": "{{user.full_name}}"`, and under **User & authentication** require first and last name at sign-up. Without the claim, users are shown as "Neighbor 1", "Neighbor 2" and so on. Repeat this on a production Clerk instance.
 4. Create the Convex dev deployment. This writes `CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL` into `.env.local`:
 
    ```bash
@@ -52,7 +53,8 @@ Open http://localhost:3000.
 | Script | What it does |
 | --- | --- |
 | `npm run dev` | Start the Next.js dev server |
-| `npm run check` | `next typegen`, type-check, lint and a production build. Run before every commit |
+| `npm test` | Convex function tests (Vitest with `convex-test`) |
+| `npm run check` | `next typegen`, type-check, lint, tests and a production build. Run before every commit |
 | `npm run build` / `npm start` | Production build and server |
 
 ## Environment variables
@@ -66,6 +68,10 @@ Real values go in `.env.local` (git-ignored). `.env.example` lists every variabl
 | `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `.env.local` | Where to land after sign-in when no return address exists (`/tools`). Do not add `*_FORCE_REDIRECT_URL`: it overrides return-after-sign-in |
 | `CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` | `.env.local` (written by `npx convex dev`) | Which Convex deployment the app talks to |
 | `CLERK_FRONTEND_API_URL` | Convex deployment env (`npx convex env set`) | Lets Convex verify Clerk-issued tokens. The deploy fails with a clear message if it is missing |
+
+### Making someone an admin
+
+Everyone starts with the `user` role. There is deliberately no function or screen that grants admin: open the Convex dashboard for your deployment, go to **Data → `users`**, and change that person's `role` to `admin`. They must have signed in once so their row exists. Do this separately for each deployment (development and production).
 
 ## Architecture (so far)
 
@@ -87,8 +93,10 @@ The reasoning behind each choice is in [`docs/design-decisions.md`](docs/design-
 
 - **Route protection is a convenience, not the security boundary.** Authorization is enforced inside Convex functions, so calling the backend directly gets no extra access.
 - **Auth state is waited for before data is requested.** A gate component distinguishes loading, signed in, signed out, and "signed in to Clerk but the backend rejected the session", so a broken integration is shown as an error and not as a sign-in loop.
+- **Users and roles live in Convex.** On first sign-in the app creates a profile (display name and role only; no email or other contact details). The role is read from the database on every call, never from the sign-in token, so changing it takes effect immediately. Shared checks in `convex/lib/access.ts` (`requireUser`, `requireAdmin`) sit at the start of every protected function.
+- **New public functions must declare their access.** A test lists every public Convex function and fails if one is added without an entry, with undeclared arguments, or with a `role` argument.
 - **No secrets in the repository.** Keys live in `.env.local` and in Convex and n8n environment settings; `.env.example` holds names only.
 
 ## Production notes
 
-A short note on what would change for production is added when the integration work is complete. Items known already: use Clerk's production instance and domain (token issuer changes with it), a stable public URL for n8n, and secret rotation for the webhook signing keys.
+A short note on what would change for production is added when the integration work is complete. Items known already: use Clerk's production instance and domain (token issuer changes with it, so users get new profiles and the admin must be set again), a stable public URL for n8n, and secret rotation for the webhook signing keys.
