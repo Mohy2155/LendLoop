@@ -11,6 +11,8 @@ const EXPECTED: Record<string, "identity" | "public" | "requireUser" | "requireA
   "tools:listMine": "requireUser",
   "tools:update": "requireUser",
   "tools:remove": "requireUser",
+  "tools:listPublic": "public", // name and category only
+  "tools:listAll": "requireUser",
 };
 
 type Registered = { isPublic?: boolean; exportArgs?: () => string };
