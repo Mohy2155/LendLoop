@@ -7,6 +7,10 @@ import { describe, expect, test } from "vitest";
 const EXPECTED: Record<string, "identity" | "public" | "requireUser" | "requireAdmin"> = {
   "users:ensureUser": "identity",
   "users:viewer": "identity", // returns null, not an error, when signed out
+  "tools:create": "requireUser",
+  "tools:listMine": "requireUser",
+  "tools:update": "requireUser",
+  "tools:remove": "requireUser",
 };
 
 type Registered = { isPublic?: boolean; exportArgs?: () => string };

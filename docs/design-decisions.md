@@ -37,7 +37,7 @@ The header's auth controls use Clerk's client-side `Show` inside a fixed-size sl
 - A skip link targets the single `<main>`; on signed-in pages the navigation comes before it, so the link actually skips it.
 - Visible focus ring on every control; text contrast is at least 6.6:1 (light) and 8:1 (dark), the focus ring at least 7:1.
 - Works from 320 px wide; respects `prefers-reduced-motion` and the system light/dark setting, including Clerk's own sign-in card.
-- Each page has its own title (`<Page> · LendLoop`); unknown URLs show a branded not-found page; errors inside signed-in pages show a retry state that re-fetches the server render.
+- Each page has its own title (`<Page> · LendLoop`); unknown URLs show a branded not-found page; errors inside signed-in pages, including a failing My listings query, show a retry state that re-fetches the server render.
 
 ### Out of scope for the shell
 
@@ -72,3 +72,25 @@ The signed-in layout creates and loads the profile once per Clerk session, so pa
 ### Test tooling
 
 Convex functions are tested with Vitest and `convex-test`. Vitest 4 is used because Vitest 5 needs newer Node type definitions than the project has, and adding it to the project needed `--legacy-peer-deps` once because of an npm resolver bug with its optional peers. The lockfile records the result, so a plain `npm install` works.
+
+## Tools
+
+### Fields and fixed lists
+
+A tool has a name, a category, a condition, a description and one owner (the user who created it). Category (Power tools, Hand tools, Garden, Ladders and access, Cleaning, Other) and condition (New, Good, Fair, Worn) are fixed lists, so the category filter added later stays clean instead of filling with near-duplicates like "Drill" and "drills". The lists, the text limits (name 1 to 60, description 1 to 300 characters after trimming, each containing at least one letter or digit so invisible characters or punctuation alone cannot make a blank-looking name) and the per-user cap live in `convex/lib/toolOptions.ts`, shared by the schema, the functions and the form. The values are stored as their labels. Adding a value is a one-line change; renaming or removing one needs a data migration, because Convex checks stored documents against the schema.
+
+### Ownership, enforced in the backend
+
+`tools.create`, `tools.update`, `tools.remove` and `tools.listMine` all require a signed-in user with a profile and none accepts an owner or a role: the owner is always the caller. Only the owner can edit or delete a tool; a missing tool gives "not found" and someone else's gives "forbidden", and the admin role does not widen this. Checks run in a fixed order: argument validators, then the sign-in check, then the tool lookup and owner check, then the text checks, then the cap, so a signed-out caller with well-formed arguments learns only that they are signed out. The page only mirrors these rules for usability.
+
+### Permanent delete, and a cap
+
+Deleting a tool removes it. Rules for tools that have open requests or loans arrive when borrow requests are added. One user can own at most 50 tools, so a single account cannot flood the board; a later list across all users still has to be bounded or paginated.
+
+### Error codes
+
+Failures use `NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`, `NOT_FOUND`, `INVALID_INPUT` and `LIMIT_REACHED`. They describe only the caller's request, never other users' data. Argument-validator failures (a value outside a list, an id from another table) are plain errors with no code, so the interface falls back to a generic message for them.
+
+### The My listings page
+
+One form serves adding and editing, and only one form is open at a time. A save in progress cannot be submitted again, which matters because Convex replays an in-flight call after a dropped connection. If a tool is deleted in another tab while it is being edited, the form stays open with a notice instead of vanishing, and saving is blocked. Focus returns to the control that opened a form or confirmation (cancelling a delete goes back to that row's Delete button), or to "Add a tool" if the focused row disappears, and a polite status line announces additions, saves and deletions.

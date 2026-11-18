@@ -9,6 +9,8 @@
  */
 
 import type * as lib_access from "../lib/access.js";
+import type * as lib_toolOptions from "../lib/toolOptions.js";
+import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
 import type {
@@ -19,6 +21,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "lib/access": typeof lib_access;
+  "lib/toolOptions": typeof lib_toolOptions;
+  tools: typeof tools;
   users: typeof users;
 }>;
 
