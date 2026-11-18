@@ -1,12 +1,16 @@
+import type { Metadata } from "next";
 import { SignIn } from "@clerk/nextjs";
 import { Suspense } from "react";
+import { Main } from "@/components/main";
+
+export const metadata: Metadata = { title: "Sign in" };
 
 export default function SignInPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <Main className="items-center justify-center py-10">
       <Suspense>
         <SignIn />
       </Suspense>
-    </div>
+    </Main>
   );
 }

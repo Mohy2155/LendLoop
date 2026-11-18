@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="LendLoop">
+  <rect width="32" height="32" rx="7" fill="#1f5a45"/>
+  <path d="M10.5 11.5h9a4.5 4.5 0 0 1 0 9h-3" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13.5 8.5l-3 3 3 3" fill="none" stroke="#f2c230" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18.5 23.5l3-3-3-3" fill="none" stroke="#f2c230" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
