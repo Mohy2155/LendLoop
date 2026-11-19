@@ -1,0 +1,173 @@
+{
+  "id": "LendLoopRequests",
+  "name": "Request notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "request-events",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "5b0c7a52-3d4e-4d4a-9a2b-6f1d0a4c8e11"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verifies the HMAC signature and the timestamp. Never throws: anything wrong means { valid: false }.\nconst reject = () => [{ json: { valid: false } }];\ntry {\n  const headers = $input.first().json.headers || {};\n  const signature = String(headers['x-lendloop-signature'] || '');\n  const timestamp = String(headers['x-lendloop-timestamp'] || '');\n  const secret = $env.LENDLOOP_WEBHOOK_SECRET;\n  if (!secret) return reject();\n  if (!/^[0-9a-f]{64}$/.test(signature) || !/^[0-9]{10,16}$/.test(timestamp)) return reject();\n  if (Math.abs(Date.now() - Number(timestamp)) > 5 * 60 * 1000) return reject();\n\n  // The signature covers the exact bytes Convex sent, so hash the raw body, not parsed JSON.\n  const raw = await this.helpers.getBinaryDataBuffer(0, 'data');\n  const crypto = require('crypto');\n  const expected = crypto.createHmac('sha256', secret).update(timestamp + '.').update(raw).digest();\n  if (!crypto.timingSafeEqual(expected, Buffer.from(signature, 'hex'))) return reject();\n\n  return [{ json: { valid: true, ...JSON.parse(raw.toString('utf8')) } }];\n} catch (error) {\n  return reject();\n}"
+      },
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6d3f5c1e-8a47-4b19-9c0e-2f7b1a3d5e60",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Logged mock notification. Uses only the fields in the payload.\nconst p = $input.first().json;\nif (!['pending', 'approved', 'declined', 'returned'].includes(p.status)) {\n  throw new Error('Unknown request status: ' + p.status);\n}\nconst dates = p.startDate === p.endDate ? p.startDate : p.startDate + ' to ' + p.endDate;\nlet to;\nlet text;\nif (p.status === 'pending') {\n  to = p.ownerName;\n  text = p.borrowerName + ' asked to borrow your ' + p.toolName + ' (' + dates + ').';\n} else {\n  to = p.borrowerName;\n  const what = { approved: 'was approved', declined: 'was declined', returned: 'was marked as returned' }[p.status];\n  text = 'Your request for ' + p.toolName + ' (' + dates + ') ' + what + '.';\n}\nconsole.log('[notification] to ' + to + ': ' + text);\nreturn [{ json: { to, text } }];"
+      },
+      "name": "Build notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "node": "Build notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "LendLoopErrors01"
+  },
+  "pinData": {},
+  "active": false
+}

@@ -10,8 +10,11 @@
 
 import type * as admin from "../admin.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_notify from "../lib/notify.js";
+import type * as lib_notifyPayload from "../lib/notifyPayload.js";
 import type * as lib_paging from "../lib/paging.js";
 import type * as lib_toolOptions from "../lib/toolOptions.js";
+import type * as notify from "../notify.js";
 import type * as requests from "../requests.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
@@ -25,8 +28,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   "lib/access": typeof lib_access;
+  "lib/notify": typeof lib_notify;
+  "lib/notifyPayload": typeof lib_notifyPayload;
   "lib/paging": typeof lib_paging;
   "lib/toolOptions": typeof lib_toolOptions;
+  notify: typeof notify;
   requests: typeof requests;
   tools: typeof tools;
   users: typeof users;

@@ -1,0 +1,23 @@
+# Local n8n for LendLoop. Start with: docker compose up -d   (see the README for the one-time import)
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.49.2
+    ports:
+      - "5678:5678"
+    environment:
+      # Public base URL n8n puts in webhook URLs; use your tunnel URL when Convex must reach it.
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      # Shared secret used to verify the signature on every webhook call.
+      LENDLOOP_WEBHOOK_SECRET: ${LENDLOOP_WEBHOOK_SECRET}
+      # The verify step reads the secret with $env and uses Node's crypto module.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      # Lets Code node console.log reach the container log.
+      CODE_ENABLE_STDOUT: "true"
+      GENERIC_TIMEZONE: UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+
+volumes:
+  n8n_data:

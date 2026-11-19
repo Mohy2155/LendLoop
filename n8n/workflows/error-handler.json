@@ -1,0 +1,46 @@
+{
+  "id": "LendLoopErrors01",
+  "name": "Error handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Makes a failed run visible: workflow name, execution id and the error message.\nconst e = $input.first().json;\nconst line = '[error-handler] workflow \"' + (e.workflow && e.workflow.name) + '\" failed, execution ' + (e.execution && e.execution.id) + ': ' + (e.execution && e.execution.error && e.execution.error.message);\nconsole.log(line);\nreturn [{ json: { message: line } }];"
+      },
+      "name": "Log failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false
+}

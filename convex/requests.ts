@@ -2,6 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/access";
+import { queueNotification } from "./lib/notify";
 import { safePaging } from "./lib/paging";
 
 // Order of checks: argument validators, requireUser, lookup (NOT_FOUND), ownership (FORBIDDEN),
@@ -22,15 +23,9 @@ export const create = mutation({
     if (!isDay(startDate) || !isDay(endDate) || endDate < startDate) {
       throw new ConvexError({ code: "INVALID_INPUT" });
     }
-    await ctx.db.insert("requests", {
-      toolId,
-      toolName: tool.name,
-      ownerId: tool.ownerId,
-      borrowerId: user._id,
-      startDate,
-      endDate,
-      status: "pending",
-    });
+    const fields = { toolName: tool.name, ownerId: tool.ownerId, borrowerId: user._id, startDate, endDate };
+    await ctx.db.insert("requests", { toolId, ...fields, status: "pending" });
+    await queueNotification(ctx, { ...fields, status: "pending" });
   },
 });
 
@@ -42,7 +37,9 @@ export const decide = mutation({
     if (!request) throw new ConvexError({ code: "NOT_FOUND" });
     if (request.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
     if (request.status !== "pending") throw new ConvexError({ code: "NOT_PENDING" });
-    await ctx.db.patch("requests", id, { status: decision === "approve" ? "approved" : "declined" });
+    const status = decision === "approve" ? "approved" : "declined";
+    await ctx.db.patch("requests", id, { status });
+    await queueNotification(ctx, { ...request, status });
   },
 });
 
@@ -57,6 +54,7 @@ export const markReturned = mutation({
     // shortcut: compares against the server's UTC date, same as the on-loan check.
     if (request.startDate > new Date().toISOString().slice(0, 10)) throw new ConvexError({ code: "NOT_STARTED" });
     await ctx.db.patch("requests", id, { status: "returned" });
+    await queueNotification(ctx, { ...request, status: "returned" });
   },
 });
 
