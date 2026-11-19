@@ -5,7 +5,7 @@ import { requireUser } from "./lib/access";
 import { safePaging } from "./lib/paging";
 
 // Order of checks: argument validators, requireUser, lookup (NOT_FOUND), ownership (FORBIDDEN),
-// state (NOT_PENDING), dates (INVALID_INPUT). None takes an owner, borrower or status.
+// state (NOT_PENDING / NOT_APPROVED / NOT_STARTED), dates (INVALID_INPUT). None takes an owner, borrower or status.
 
 /** A real calendar day written YYYY-MM-DD (rejects 2026-02-31). */
 function isDay(value: string) {
@@ -43,6 +43,20 @@ export const decide = mutation({
     if (request.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
     if (request.status !== "pending") throw new ConvexError({ code: "NOT_PENDING" });
     await ctx.db.patch("requests", id, { status: decision === "approve" ? "approved" : "declined" });
+  },
+});
+
+export const markReturned = mutation({
+  args: { id: v.id("requests") },
+  handler: async (ctx, { id }) => {
+    const user = await requireUser(ctx);
+    const request = await ctx.db.get("requests", id);
+    if (!request) throw new ConvexError({ code: "NOT_FOUND" });
+    if (request.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
+    if (request.status !== "approved") throw new ConvexError({ code: "NOT_APPROVED" });
+    // shortcut: compares against the server's UTC date, same as the on-loan check.
+    if (request.startDate > new Date().toISOString().slice(0, 10)) throw new ConvexError({ code: "NOT_STARTED" });
+    await ctx.db.patch("requests", id, { status: "returned" });
   },
 });
 

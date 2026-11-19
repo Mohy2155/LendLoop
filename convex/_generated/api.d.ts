@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_paging from "../lib/paging.js";
 import type * as lib_toolOptions from "../lib/toolOptions.js";
@@ -22,6 +23,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   "lib/access": typeof lib_access;
   "lib/paging": typeof lib_paging;
   "lib/toolOptions": typeof lib_toolOptions;

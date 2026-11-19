@@ -2,7 +2,7 @@ import { paginationOptsValidator, paginationResultValidator } from "convex/serve
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import { requireUser } from "./lib/access";
+import { requireAdmin, requireUser } from "./lib/access";
 import { safePaging } from "./lib/paging";
 import {
   categoryValidator,
@@ -95,6 +95,16 @@ export const remove = mutation({
     const tool = await ctx.db.get("tools", id);
     if (!tool) throw new ConvexError({ code: "NOT_FOUND" });
     if (tool.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
+    await ctx.db.delete("tools", id);
+  },
+});
+
+/** Admin only: removes any listing. Requests keep their saved tool name. */
+export const removeAny = mutation({
+  args: { id: v.id("tools") },
+  handler: async (ctx, { id }) => {
+    await requireAdmin(ctx);
+    if (!(await ctx.db.get("tools", id))) throw new ConvexError({ code: "NOT_FOUND" });
     await ctx.db.delete("tools", id);
   },
 });

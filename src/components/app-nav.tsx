@@ -1,15 +1,24 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useConvexAuth, useQueries, type RequestForQueries } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { NAV_ITEMS } from "@/lib/nav";
 
 export function AppNav() {
   const pathname = usePathname();
+  // This nav sits outside ViewerProvider, so it reads the role itself. useQueries returns an error
+  // as a value, so a failed read just hides the Admin link instead of throwing above the page.
+  const { isAuthenticated } = useConvexAuth();
+  const requests = useMemo((): RequestForQueries => (isAuthenticated ? { viewer: { query: api.users.viewer, args: {} } } : {}), [isAuthenticated]);
+  const viewer = useQueries(requests).viewer;
+  const isAdmin = !(viewer instanceof Error) && (viewer as { role?: string } | null | undefined)?.role === "admin";
   return (
     <nav aria-label="Main" className="border-b border-border">
       <ul className="mx-auto flex w-full max-w-5xl gap-1 overflow-x-auto px-4 sm:px-6">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
           const exact = pathname === item.href;
           const child = !exact && pathname.startsWith(`${item.href}/`);
           return (
