@@ -19,6 +19,10 @@ export function requestMessage(error: unknown, fallback: string) {
       return "You cannot do this.";
     case "NOT_PENDING":
       return "This request was already decided.";
+    case "NOT_APPROVED":
+      return "This loan was already marked returned.";
+    case "NOT_STARTED":
+      return "This loan has not started yet.";
     case "INVALID_INPUT":
       return "Choose a start and an end date, with the end on or after the start.";
     default:
@@ -136,19 +140,21 @@ export function MyRequests() {
 export function IncomingRequests() {
   const { results, status, loadMore } = usePaginatedQuery(api.requests.listIncoming, {}, { initialNumItems: PAGE_SIZE });
   const decide = useMutation(api.requests.decide);
+  const markReturned = useMutation(api.requests.markReturned);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
-  async function act(id: Id<"requests">, decision: "approve" | "decline") {
+  async function act(id: Id<"requests">, decision: "approve" | "decline" | "return") {
     if (busy) return;
     setBusy(id);
     setMessage("");
     try {
-      await decide({ id, decision });
-      // The buttons disappear once decided, so move focus to this request's heading.
+      if (decision === "return") await markReturned({ id });
+      else await decide({ id, decision });
+      // The buttons disappear once acted on, so move focus to this request's heading.
       document.getElementById(`request-${id}`)?.focus();
     } catch (error) {
-      setMessage(requestMessage(error, "We could not save your decision. Try again."));
+      setMessage(requestMessage(error, "We could not save this. Try again."));
     } finally {
       setBusy(null);
     }
@@ -185,6 +191,13 @@ export function IncomingRequests() {
                 </button>
                 <button type="button" className={quietButton} aria-disabled={busy === r._id} onClick={() => act(r._id, "decline")}>
                   Decline<span className="sr-only"> {r.toolName}</span>
+                </button>
+              </div>
+            )}
+            {r.status === "approved" && (
+              <div className="mt-3">
+                <button type="button" className={primaryButton} aria-disabled={busy === r._id} onClick={() => act(r._id, "return")}>
+                  Mark returned<span className="sr-only"> {r.toolName}</span>
                 </button>
               </div>
             )}

@@ -298,3 +298,121 @@ describe("tools.listAll onLoan", () => {
     expect(await onLoan(t)).toBe(true);
   });
 });
+
+describe("requests.markReturned", () => {
+  const NOT_APPROVED = { data: { code: "NOT_APPROVED" } };
+  const NOT_STARTED = { data: { code: "NOT_STARTED" } };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-11T12:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** User 2 borrows user 1's Drill; the request is approved by default. */
+  const loan = async (status: "pending" | "approved" | "declined" | "returned" = "approved", start = "2026-06-10", end = "2026-06-12") => {
+    const s = await setup(4);
+    await request(s.t, 2, s.drill, start, end);
+    const [r] = await all(s.t);
+    await s.t.run((ctx) => ctx.db.patch(r._id, { status }));
+    return { ...s, id: r._id };
+  };
+  const mark = (t: T["t"], n: number, id: Id<"requests">) => as(t, n).mutation(api.requests.markReturned, { id });
+
+  test("fails without an identity or a profile", async () => {
+    const { t, id } = await loan();
+    await expect(t.mutation(api.requests.markReturned, { id })).rejects.toMatchObject(NOT_SIGNED_IN);
+    await expect(t.withIdentity(identity(99)).mutation(api.requests.markReturned, { id })).rejects.toMatchObject(PROFILE_MISSING);
+    expect((await all(t))[0].status).toBe("approved");
+  });
+
+  test("the owner marks an approved loan returned and the tool is no longer on loan", async () => {
+    const { t, id } = await loan();
+    expect((await as(t, 3).query(api.tools.listAll, opts)).page[0].onLoan).toBe(true);
+    await mark(t, 1, id);
+    expect((await all(t))[0].status).toBe("returned");
+    expect((await as(t, 3).query(api.tools.listAll, opts)).page[0].onLoan).toBe(false);
+  });
+
+  test("the borrower, an admin who is not the owner and a stranger are FORBIDDEN", async () => {
+    const { t, id } = await loan();
+    await makeAdmin(t, 3);
+    for (const n of [2, 3, 4]) await expect(mark(t, n, id)).rejects.toMatchObject(FORBIDDEN);
+    expect((await all(t))[0].status).toBe("approved");
+  });
+
+  test.each(["pending", "declined", "returned"] as const)("a %s request is NOT_APPROVED and unchanged", async (status) => {
+    const { t, id } = await loan(status);
+    await expect(mark(t, 1, id)).rejects.toMatchObject(NOT_APPROVED);
+    expect((await all(t))[0].status).toBe(status);
+  });
+
+  test("a loan that has not started is NOT_STARTED and stays approved", async () => {
+    const { t, id } = await loan("approved", "2026-06-12", "2026-06-14");
+    await expect(mark(t, 1, id)).rejects.toMatchObject(NOT_STARTED);
+    expect((await all(t))[0].status).toBe("approved");
+  });
+
+  test("a loan that starts today can be marked returned", async () => {
+    const { t, id } = await loan("approved", "2026-06-11", "2026-06-14");
+    await mark(t, 1, id);
+    expect((await all(t))[0].status).toBe("returned");
+  });
+
+  test("a deleted request is NOT_FOUND", async () => {
+    const { t, id } = await loan();
+    await t.run((ctx) => ctx.db.delete(id));
+    await expect(mark(t, 1, id)).rejects.toMatchObject(NOT_FOUND);
+  });
+
+  test("anything besides the id is rejected", async () => {
+    const { t, id } = await loan();
+    await expect(as(t, 1).mutation(api.requests.markReturned, { id, status: "returned" } as never)).rejects.toThrow();
+  });
+});
+
+describe("requests.markReturned edge cases", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-11T12:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const approved = async (start: string, end: string) => {
+    const s = await setup(4);
+    await request(s.t, 2, s.drill, start, end);
+    const [r] = await all(s.t);
+    await s.t.run((ctx) => ctx.db.patch(r._id, { status: "approved" }));
+    return { ...s, id: r._id };
+  };
+
+  test("an overdue loan can be marked returned", async () => {
+    const { t, id } = await approved("2026-05-01", "2026-05-05");
+    await as(t, 1).mutation(api.requests.markReturned, { id });
+    expect((await all(t))[0].status).toBe("returned");
+  });
+
+  test("an owner who is also an admin can mark their own loan returned", async () => {
+    const { t, id } = await approved("2026-06-10", "2026-06-12");
+    await makeAdmin(t, 1);
+    await as(t, 1).mutation(api.requests.markReturned, { id });
+    expect((await all(t))[0].status).toBe("returned");
+  });
+
+  test("a stranger gets FORBIDDEN before NOT_APPROVED or NOT_STARTED", async () => {
+    const { t, id } = await approved("2026-07-01", "2026-07-02");
+    await expect(as(t, 4).mutation(api.requests.markReturned, { id })).rejects.toMatchObject(FORBIDDEN);
+    await t.run((ctx) => ctx.db.patch(id, { status: "pending" }));
+    await expect(as(t, 4).mutation(api.requests.markReturned, { id })).rejects.toMatchObject(FORBIDDEN);
+  });
+
+  test("the tool stays on loan while another approved request includes today", async () => {
+    const { t, drill, id } = await approved("2026-06-10", "2026-06-12");
+    await t.run(async (ctx) => {
+      const [u1, u2] = await ctx.db.query("users").collect();
+      await ctx.db.insert("requests", { toolId: drill, toolName: "Drill", ownerId: u1._id, borrowerId: u2._id, startDate: "2026-06-09", endDate: "2026-06-13", status: "approved" });
+    });
+    await as(t, 1).mutation(api.requests.markReturned, { id });
+    expect((await as(t, 3).query(api.tools.listAll, opts)).page[0].onLoan).toBe(true);
+  });
+});

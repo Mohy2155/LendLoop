@@ -7,6 +7,7 @@ export default defineSchema({
     tokenIdentifier: v.string(),
     displayName: v.string(),
     role: v.union(v.literal("user"), v.literal("admin")),
+    trusted: v.optional(v.boolean()), // Trusted Lender; set by an admin, absent means not trusted
   }).index("by_tokenIdentifier", ["tokenIdentifier"]),
 
   tools: defineTable({
@@ -25,7 +26,7 @@ export default defineSchema({
     borrowerId: v.id("users"),
     startDate: v.string(), // YYYY-MM-DD
     endDate: v.string(),
-    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("declined")),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("declined"), v.literal("returned")),
   })
     .index("by_borrower", ["borrowerId"])
     .index("by_owner", ["ownerId"])

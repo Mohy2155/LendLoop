@@ -6,7 +6,7 @@ Each section records a decision, the reason, and the alternative that was reject
 
 ### Route protection is UX only
 
-`src/proxy.ts` redirects signed-out visitors from `/tools`, `/my-listings`, `/my-requests`, `/incoming-requests` (and child paths) to the local `/sign-in`, which sends them back afterwards. It is not the authorization boundary: a visitor can bypass web routes and call Convex directly, so every data function checks the caller itself. A path mismatch in the proxy can therefore only cause a missed redirect, never data exposure.
+`src/proxy.ts` redirects signed-out visitors from `/tools`, `/my-listings`, `/my-requests`, `/incoming-requests`, `/admin` (and child paths) to the local `/sign-in`, which sends them back afterwards. It is not the authorization boundary: a visitor can bypass web routes and call Convex directly, so every data function checks the caller itself. A path mismatch in the proxy can therefore only cause a missed redirect, never data exposure.
 
 - **Path check, not Clerk's route matcher.** The installed Clerk version deprecates its route matcher and prints a warning on every run; a small exact-plus-children path check (`isSignedInPath`) avoids the warning. `/toolsx` is correctly not treated as `/tools`.
 - **Single source of truth.** The list of signed-in paths is the navigation list in `src/lib/nav.ts`, so adding a page cannot silently skip the redirect as long as it is listed there.
@@ -47,7 +47,7 @@ No data model, roles, or Convex functions. Those arrive with listings, requests 
 
 ### Profile in Convex, created on first sign-in
 
-A signed-in user gets one profile (`users` table: identity, display name, role), created by the `users.ensureUser` mutation the first time the signed-in app loads and keyed by Clerk's issuer-plus-subject identifier. The mutation takes no input, so a client cannot choose its role or name. A Clerk webhook would also work but needs a public URL and a signing secret; it is a possible later improvement, and it would also handle accounts deleted in Clerk. Moving to a new Clerk instance (for example production) creates new profiles, so admins must be set again there.
+A signed-in user gets one profile (`users` table: identity, display name, role, and a Trusted Lender flag once an admin sets it), created by the `users.ensureUser` mutation the first time the signed-in app loads and keyed by Clerk's issuer-plus-subject identifier. The mutation takes no input, so a client cannot choose its role or name. A Clerk webhook would also work but needs a public URL and a signing secret; it is a possible later improvement, and it would also handle accounts deleted in Clerk. Moving to a new Clerk instance (for example production) creates new profiles, so admins must be set again there.
 
 ### Display names
 
@@ -81,15 +81,15 @@ A tool has a name, a category, a condition, a description and one owner (the use
 
 ### Ownership, enforced in the backend
 
-`tools.create`, `tools.update`, `tools.remove` and `tools.listMine` all require a signed-in user with a profile and none accepts an owner or a role: the owner is always the caller. Only the owner can edit or delete a tool; a missing tool gives "not found" and someone else's gives "forbidden", and the admin role does not widen this. Checks run in a fixed order: argument validators, then the sign-in check, then the tool lookup and owner check, then the text checks, then the cap, so a signed-out caller with well-formed arguments learns only that they are signed out. The page only mirrors these rules for usability.
+`tools.create`, `tools.update`, `tools.remove` and `tools.listMine` all require a signed-in user with a profile and none accepts an owner or a role: the owner is always the caller. Only the owner can edit or delete a tool; a missing tool gives "not found" and someone else's gives "forbidden", and the admin role does not widen these functions (an admin removes a listing through the separate `tools.removeAny`, described under Admin). Checks run in a fixed order: argument validators, then the sign-in check, then the tool lookup and owner check, then the text checks, then the cap, so a signed-out caller with well-formed arguments learns only that they are signed out. The page only mirrors these rules for usability.
 
 ### Permanent delete, and a cap
 
-Deleting a tool removes it. Rules for tools that have open requests or loans arrive when borrow requests are added. One user can own at most 50 tools, so a single account cannot flood the board; a later list across all users still has to be bounded or paginated.
+Deleting a tool removes it. A tool is removed whether or not it has requests; its requests keep the saved tool name. One user can own at most 50 tools, so a single account cannot flood the board; a later list across all users still has to be bounded or paginated.
 
 ### Error codes
 
-Failures use `NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`, `NOT_FOUND`, `INVALID_INPUT` and `LIMIT_REACHED`. They describe only the caller's request, never other users' data. Argument-validator failures (a value outside a list, an id from another table) are plain errors with no code, so the interface falls back to a generic message for them.
+Failures use `NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`, `NOT_FOUND`, `INVALID_INPUT`, `LIMIT_REACHED`, `NOT_PENDING`, `NOT_APPROVED` and `NOT_STARTED`. They describe only the caller's request, never other users' data. Argument-validator failures (a value outside a list, an id from another table) are plain errors with no code, so the interface falls back to a generic message for them.
 
 ### The My listings page
 
@@ -105,10 +105,21 @@ Public rows have no id, so the list uses its position as the key; rows hold no s
 
 ## Borrow requests
 
-One `requests` table holds every request: tool, a copy of the tool's name (so it still reads if the tool is deleted), owner, borrower, start and end date (`YYYY-MM-DD` text) and a status of pending, approved or declined. An approved request is the loan; marking it returned comes later.
+One `requests` table holds every request: tool, a copy of the tool's name (so it still reads if the tool is deleted), owner, borrower, start and end date (`YYYY-MM-DD` text) and a status of pending, approved, declined or returned. An approved or returned request is a loan.
 
 `requests.create` takes only a tool and two dates; the borrower and owner are taken from the caller and the tool, never from the client. The only date rule is a real calendar range with the end not before the start. `requests.decide` takes a request id and approve or decline, and works only for the request's owner while it is pending, whatever the caller's role. The two lists (`listMine`, `listIncoming`) return only the caller's own requests, with no other-party identifiers; the owner's list shows the borrower's display name so they know who is asking.
 
 The signed-in tool list reports whether a tool is on loan today: an approved request whose dates include today's UTC date. It is not refreshed until the query re-runs, and people far from UTC can see it a day early or late.
 
+`requests.markReturned` takes only the request id and works only for the request's owner, whatever their role, on an approved loan that has already started (start date not after today, UTC), so a future loan cannot be marked returned. A returned loan no longer counts as on loan.
+
 Deliberately not handled, since the brief does not ask for it: overlapping approved requests, cancelling a request, requesting your own tool, limits on how many requests someone can make, and deleting a tool that has requests.
+
+## Admin
+
+Admin powers are separate Convex functions that all start with the admin check, so the owner-only functions keep their rules. `tools.removeAny` deletes any listing with no extra rule: a tool with requests or loans is removed like any other, and its requests keep their saved tool name. `admin.listLoans` returns every approved or returned request with the tool name, dates, status and the owner's and borrower's display names ("Unknown neighbor" if a user is gone), and nothing else. Display names are shown so the admin can tell who lent to whom. `admin.listUsers` and `admin.setTrusted` list users (id, display name, flag) and set or clear the Trusted Lender flag, which changes no other field. The flag is stored as an optional field on the profile, so users without it are not trusted, and it is shown on the Admin page only: no other function returns it.
+
+The Admin link is hidden unless the viewer is an admin and never grants access; the page's data comes only from the admin functions, so a non-admin who opens it gets an error and no data. The navigation reads the role itself because it sits outside the profile provider, and a failed read just hides the link.
+
+The loans list filters by status while paging, so a page can be short or empty while later pages hold loans; the page shows "no loans" only after every page has been read.
+

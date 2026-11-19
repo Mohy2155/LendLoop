@@ -17,6 +17,11 @@ const EXPECTED: Record<string, "identity" | "public" | "requireUser" | "requireA
   "requests:decide": "requireUser",
   "requests:listMine": "requireUser",
   "requests:listIncoming": "requireUser",
+  "requests:markReturned": "requireUser",
+  "tools:removeAny": "requireAdmin",
+  "admin:listLoans": "requireAdmin",
+  "admin:listUsers": "requireAdmin",
+  "admin:setTrusted": "requireAdmin",
 };
 
 type Registered = { isPublic?: boolean; exportArgs?: () => string };

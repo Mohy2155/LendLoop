@@ -7,6 +7,7 @@ import { api } from "../../convex/_generated/api";
 import { PAGE_SIZE } from "../../convex/lib/paging";
 import { CATEGORIES, type Category } from "../../convex/lib/toolOptions";
 import { quietButton } from "./button-styles";
+import { AdminRemove } from "./admin-remove";
 import { RequestForm } from "./requests";
 
 export function Loading() {
@@ -192,6 +193,7 @@ export function AllTools() {
                 </p>
                 <p className="mt-2 break-words">{tool.description}</p>
                 <RequestForm toolId={tool._id} toolName={tool.name} />
+                <AdminRemove toolId={tool._id} toolName={tool.name} />
               </li>
             ))}
           </ul>
