@@ -7,7 +7,7 @@ import { lastReminderAt } from "./lib/lastReminder";
 import { queueNotification } from "./lib/notify";
 import { safePaging } from "./lib/paging";
 
-// Order of checks: argument validators, requireUser, lookup (NOT_FOUND), ownership (FORBIDDEN),
+// Order of checks: argument validators, requireUser, lookup (NOT_FOUND), ownership (FORBIDDEN, or OWN_TOOL on create),
 // state (NOT_PENDING / NOT_APPROVED / NOT_STARTED), dates (INVALID_INPUT). None takes an owner, borrower or status.
 
 export const create = mutation({
@@ -16,6 +16,7 @@ export const create = mutation({
     const user = await requireUser(ctx);
     const tool = await ctx.db.get("tools", toolId);
     if (!tool) throw new ConvexError({ code: "NOT_FOUND" });
+    if (tool.ownerId === user._id) throw new ConvexError({ code: "OWN_TOOL" });
     if (!isDay(startDate) || !isDay(endDate) || endDate < startDate) {
       throw new ConvexError({ code: "INVALID_INPUT" });
     }

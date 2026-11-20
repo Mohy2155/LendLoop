@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, usePaginatedQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { PAGE_SIZE } from "../../convex/lib/paging";
 import { reminderText } from "../../convex/lib/reminderText";
-import { primaryButton, quietButton } from "./button-styles";
-import { Empty, Loading, LoadMore, pill } from "./tool-board";
+import { formatRange } from "../../convex/lib/requestDisplay";
+import { dangerOutlineButton, primaryButton, quietButton } from "./button-styles";
+import { StatusBadge } from "./status-badge";
+import { Empty, Loading, LoadMore } from "./tool-board";
 
 /** Plain wording for a refused call. Anything without a known code gets the fallback. */
 export function requestMessage(error: unknown, fallback: string) {
@@ -26,6 +28,8 @@ export function requestMessage(error: unknown, fallback: string) {
       return "This loan has not started yet.";
     case "INVALID_INPUT":
       return "Choose a start and an end date, with the end on or after the start.";
+    case "OWN_TOOL":
+      return "This is your own tool, so you cannot borrow it.";
     default:
       return fallback;
   }
@@ -38,9 +42,8 @@ export function ReminderLine({ at }: { at: number | undefined }) {
   return text ? <span>{text}</span> : null;
 }
 
-function dates(start: string, end: string) {
-  return start === end ? start : `${start} to ${end}`;
-}
+const label = "text-muted";
+const dateField = "mt-1 block min-h-10 rounded-md border bg-surface px-3 py-2";
 
 /** "Request to borrow" for one tool: a start and an end date. */
 export function RequestForm({ toolId, toolName }: { toolId: Id<"tools">; toolName: string }) {
@@ -50,6 +53,8 @@ export function RequestForm({ toolId, toolName }: { toolId: Id<"tools">; toolNam
   const [end, setEnd] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [badDates, setBadDates] = useState(false); // only a date problem outlines the date fields
+  const uid = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef(false);
 
@@ -68,21 +73,20 @@ export function RequestForm({ toolId, toolName }: { toolId: Id<"tools">; toolNam
 
   if (!open)
     return (
-      <div className="mt-3">
-        <button ref={trigger} type="button" className={quietButton} onClick={() => setOpen(true)}>
-          Request to borrow<span className="sr-only"> {toolName}</span>
-        </button>
-      </div>
+      <button ref={trigger} type="button" className={quietButton} onClick={() => setOpen(true)}>
+        Request to borrow<span className="sr-only"> {toolName}</span>
+      </button>
     );
 
   return (
     <form
-      className="mt-3 flex flex-wrap items-end gap-3"
+      className="flex basis-full flex-wrap items-end gap-3"
       onSubmit={async (event) => {
         event.preventDefault();
         if (busy) return;
         setBusy(true);
         setMessage("");
+        setBadDates(false);
         try {
           await create({ toolId, startDate: start, endDate: end });
           close();
@@ -90,18 +94,22 @@ export function RequestForm({ toolId, toolName }: { toolId: Id<"tools">; toolNam
           setEnd("");
         } catch (error) {
           setMessage(requestMessage(error, "We could not send this request. Try again."));
+          setBadDates(error instanceof ConvexError && (error.data as { code?: string })?.code === "INVALID_INPUT");
         } finally {
           setBusy(false);
         }
       }}
     >
+      <p id={`${uid}-hint`} className={`basis-full text-sm ${label}`}>
+        Choose the first and last day you need it. One day is fine.
+      </p>
       <label className="text-sm font-medium">
         Start
-        <input type="date" required value={start} onChange={(e) => setStart(e.target.value)} className="mt-1 block min-h-10 rounded-md border border-border bg-surface px-3 py-2" />
+        <input type="date" required value={start} onChange={(e) => setStart(e.target.value)} aria-invalid={badDates || undefined} aria-describedby={`${uid}-hint${badDates ? ` ${uid}-error` : ""}`} className={`${dateField} ${badDates ? "border-danger" : "border-border"}`} />
       </label>
       <label className="text-sm font-medium">
         End
-        <input type="date" required value={end} onChange={(e) => setEnd(e.target.value)} className="mt-1 block min-h-10 rounded-md border border-border bg-surface px-3 py-2" />
+        <input type="date" required value={end} onChange={(e) => setEnd(e.target.value)} aria-invalid={badDates || undefined} aria-describedby={`${uid}-hint${badDates ? ` ${uid}-error` : ""}`} className={`${dateField} ${badDates ? "border-danger" : "border-border"}`} />
       </label>
       <button type="submit" className={primaryButton} aria-disabled={busy}>
         Send request
@@ -110,7 +118,7 @@ export function RequestForm({ toolId, toolName }: { toolId: Id<"tools">; toolNam
         Cancel
       </button>
       {message && (
-        <p role="alert" className="basis-full text-sm font-medium">
+        <p id={`${uid}-error`} role="alert" className="basis-full text-sm font-medium text-danger">
           {message}
         </p>
       )}
@@ -121,6 +129,7 @@ export function RequestForm({ toolId, toolName }: { toolId: Id<"tools">; toolNam
 /** The requests the caller has made. */
 export function MyRequests() {
   const { results, status, loadMore } = usePaginatedQuery(api.requests.listMine, {}, { initialNumItems: PAGE_SIZE });
+  const [now] = useState(() => Date.now()); // read once per mount, so render stays pure
   if (status === "LoadingFirstPage") return <Loading />;
   if (results.length === 0) return <Empty text="You have not asked to borrow anything yet." />;
   return (
@@ -128,13 +137,15 @@ export function MyRequests() {
       <ul className="mt-6 space-y-3">
         {results.map((r) => (
           <li key={r._id} className="rounded-md border border-border bg-surface p-4">
-            <h2 className="text-lg font-semibold break-words">{r.toolName}</h2>
-            <p className="mt-1 flex flex-wrap gap-2 text-sm text-muted">
-              <span>{dates(r.startDate, r.endDate)}</span>
-              <span className={pill}>
-                <span className="sr-only">Status: </span>
-                {r.status}
-              </span>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h2 className="min-w-0 text-lg font-semibold break-words">{r.toolName}</h2>
+              <StatusBadge status={r.status} endDate={r.endDate} now={now} />
+            </div>
+            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+              <dt className={label}>Dates</dt>
+              <dd>{formatRange(r.startDate, r.endDate, now)}</dd>
+            </dl>
+            <p className="mt-2 text-sm text-muted empty:hidden">
               <ReminderLine at={r.lastReminderAt} />
             </p>
           </li>
@@ -152,6 +163,7 @@ export function IncomingRequests() {
   const markReturned = useMutation(api.requests.markReturned);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [now] = useState(() => Date.now()); // read once per mount, so render stays pure
 
   async function act(id: Id<"requests">, decision: "approve" | "decline" | "return") {
     if (busy) return;
@@ -174,24 +186,26 @@ export function IncomingRequests() {
   return (
     <>
       {message && (
-        <p role="alert" className="mt-6 font-medium">
+        <p role="alert" className="mt-6 font-medium text-danger">
           {message}
         </p>
       )}
       <ul className="mt-6 space-y-3">
         {results.map((r) => (
           <li key={r._id} className="rounded-md border border-border bg-surface p-4">
-            <h2 id={`request-${r._id}`} tabIndex={-1} className="text-lg font-semibold break-words">
-              {r.toolName}
-            </h2>
-            <p className="mt-1 flex flex-wrap gap-2 text-sm text-muted">
-              <span>
-                {r.borrowerName}: {dates(r.startDate, r.endDate)}
-              </span>
-              <span className={pill}>
-                <span className="sr-only">Status: </span>
-                {r.status}
-              </span>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h2 id={`request-${r._id}`} tabIndex={-1} className="min-w-0 text-lg font-semibold break-words">
+                {r.toolName}
+              </h2>
+              <StatusBadge status={r.status} endDate={r.endDate} now={now} />
+            </div>
+            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+              <dt className={label}>Borrower</dt>
+              <dd className="break-words">{r.borrowerName}</dd>
+              <dt className={label}>Dates</dt>
+              <dd>{formatRange(r.startDate, r.endDate, now)}</dd>
+            </dl>
+            <p className="mt-2 text-sm text-muted empty:hidden">
               <ReminderLine at={r.lastReminderAt} />
             </p>
             {r.status === "pending" && (
@@ -199,7 +213,7 @@ export function IncomingRequests() {
                 <button type="button" className={primaryButton} aria-disabled={busy === r._id} onClick={() => act(r._id, "approve")}>
                   Approve<span className="sr-only"> {r.toolName}</span>
                 </button>
-                <button type="button" className={quietButton} aria-disabled={busy === r._id} onClick={() => act(r._id, "decline")}>
+                <button type="button" className={dangerOutlineButton} aria-disabled={busy === r._id} onClick={() => act(r._id, "decline")}>
                   Decline<span className="sr-only"> {r.toolName}</span>
                 </button>
               </div>

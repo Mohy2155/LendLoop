@@ -89,7 +89,7 @@ Deleting a tool removes it. A tool is removed whether or not it has requests; it
 
 ### Error codes
 
-Failures use `NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`, `NOT_FOUND`, `INVALID_INPUT`, `LIMIT_REACHED`, `NOT_PENDING`, `NOT_APPROVED` and `NOT_STARTED`. They describe only the caller's request, never other users' data. Argument-validator failures (a value outside a list, an id from another table) are plain errors with no code, so the interface falls back to a generic message for them.
+Failures use `NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`, `NOT_FOUND`, `INVALID_INPUT`, `OWN_TOOL`, `LIMIT_REACHED`, `NOT_PENDING`, `NOT_APPROVED` and `NOT_STARTED`. They describe only the caller's request, never other users' data. Argument-validator failures (a value outside a list, an id from another table) are plain errors with no code, so the interface falls back to a generic message for them.
 
 ### The My listings page
 
@@ -107,13 +107,13 @@ Public rows have no id, so the list uses its position as the key; rows hold no s
 
 One `requests` table holds every request: tool, a copy of the tool's name (so it still reads if the tool is deleted), owner, borrower, start and end date (`YYYY-MM-DD` text) and a status of pending, approved, declined or returned. An approved or returned request is a loan.
 
-`requests.create` takes only a tool and two dates; the borrower and owner are taken from the caller and the tool, never from the client. The only date rule is a real calendar range with the end not before the start. `requests.decide` takes a request id and approve or decline, and works only for the request's owner while it is pending, whatever the caller's role. The two lists (`listMine`, `listIncoming`) return only the caller's own requests, with no other-party identifiers; the owner's list shows the borrower's display name so they know who is asking.
+`requests.create` takes only a tool and two dates; the borrower and owner are taken from the caller and the tool, never from the client. A request on a tool you own is refused with `OWN_TOOL` (whatever your role, and before the dates are looked at), so nothing is stored or sent to n8n; requests that already existed are not changed. The only date rule is a real calendar range with the end not before the start. `requests.decide` takes a request id and approve or decline, and works only for the request's owner while it is pending, whatever the caller's role. The two lists (`listMine`, `listIncoming`) return only the caller's own requests, with no other-party identifiers; the owner's list shows the borrower's display name so they know who is asking.
 
 The signed-in tool list reports whether a tool is on loan today: an approved request whose dates include today's UTC date. It is not refreshed until the query re-runs, and people far from UTC can see it a day early or late.
 
 `requests.markReturned` takes only the request id and works only for the request's owner, whatever their role, on an approved loan that has already started (start date not after today, UTC), so a future loan cannot be marked returned. A returned loan no longer counts as on loan.
 
-Deliberately not handled: overlapping approved requests, cancelling a request, requesting your own tool, limits on how many requests someone can make, and deleting a tool that has requests.
+Deliberately not handled: overlapping approved requests, cancelling a request, limits on how many requests someone can make, and deleting a tool that has requests.
 
 ## Admin
 

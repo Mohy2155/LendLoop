@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { primaryButton, quietButton } from "./button-styles";
+import { dangerButton, quietButton } from "./button-styles";
 import { requestMessage } from "./requests";
 import { useProfile } from "./viewer-provider";
 
@@ -32,28 +32,26 @@ export function AdminRemove({ toolId, toolName }: { toolId: Id<"tools">; toolNam
 
   if (!confirming)
     return (
-      <div className="mt-3">
-        <button
-          ref={trigger}
-          type="button"
-          className={quietButton}
-          onClick={() => {
-            setMessage("");
-            setConfirming(true);
-          }}
-        >
-          Remove<span className="sr-only"> {toolName}</span>
-        </button>
-      </div>
+      <button
+        ref={trigger}
+        type="button"
+        className={quietButton}
+        onClick={() => {
+          setMessage("");
+          setConfirming(true);
+        }}
+      >
+        Remove<span className="sr-only"> {toolName}</span>
+      </button>
     );
 
   return (
-    <div className="mt-3">
-      <p className="font-semibold">Remove {toolName}? This cannot be undone.</p>
+    <div className="basis-full">
+      <p className="font-semibold break-words">Remove {toolName}? This cannot be undone.</p>
       <div className="mt-2 flex gap-2">
         <button
           type="button"
-          className={primaryButton}
+          className={dangerButton}
           aria-disabled={busy}
           onClick={async () => {
             if (busy) return;
@@ -82,7 +80,7 @@ export function AdminRemove({ toolId, toolName }: { toolId: Id<"tools">; toolNam
         </button>
       </div>
       {message && (
-        <p role="alert" className="mt-2 text-sm font-medium">
+        <p role="alert" className="mt-2 text-sm font-medium text-danger">
           {message}
         </p>
       )}

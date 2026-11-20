@@ -17,6 +17,7 @@ import type * as lib_notify from "../lib/notify.js";
 import type * as lib_notifyPayload from "../lib/notifyPayload.js";
 import type * as lib_paging from "../lib/paging.js";
 import type * as lib_reminderText from "../lib/reminderText.js";
+import type * as lib_requestDisplay from "../lib/requestDisplay.js";
 import type * as lib_signedRequest from "../lib/signedRequest.js";
 import type * as lib_toolOptions from "../lib/toolOptions.js";
 import type * as notify from "../notify.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   "lib/notifyPayload": typeof lib_notifyPayload;
   "lib/paging": typeof lib_paging;
   "lib/reminderText": typeof lib_reminderText;
+  "lib/requestDisplay": typeof lib_requestDisplay;
   "lib/signedRequest": typeof lib_signedRequest;
   "lib/toolOptions": typeof lib_toolOptions;
   notify: typeof notify;
