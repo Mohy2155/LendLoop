@@ -47,7 +47,7 @@ export const markReturned = mutation({
     if (!request) throw new ConvexError({ code: "NOT_FOUND" });
     if (request.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
     if (request.status !== "approved") throw new ConvexError({ code: "NOT_APPROVED" });
-    // shortcut: compares against the server's UTC date, same as the on-loan check.
+    // Note: compares against the server's UTC date, same as the on-loan check.
     if (request.startDate > new Date().toISOString().slice(0, 10)) throw new ConvexError({ code: "NOT_STARTED" });
     await ctx.db.patch("requests", id, { status: "returned" });
     await queueNotification(ctx, { ...request, status: "returned" });
