@@ -331,6 +331,7 @@ describe("photos in the lists", () => {
       "category",
       "condition",
       "description",
+      "isMine",
       "name",
       "photoUrl",
       "requested",

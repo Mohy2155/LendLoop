@@ -138,17 +138,39 @@ describe("tools.listAll", () => {
     const res = await as(t, 1).query(api.tools.listAll, opts(10));
     expect(res.page).toHaveLength(2);
     for (const item of res.page)
-      expect(Object.keys(item).sort()).toEqual(["_id", "availability", "category", "condition", "description", "name", "photoUrl", "requested"]);
+      expect(Object.keys(item).sort()).toEqual(["_id", "availability", "category", "condition", "description", "isMine", "name", "photoUrl", "requested"]);
     expect(JSON.stringify(res)).not.toMatch(/ownerId|User 2/);
   });
 
   test("an admin sees the same tools and shape as a user", async () => {
-    const t = await setup();
+    const t = await setup(3);
     await makeAdmin(t, 2);
-    await seed(t, 1, [{ name: "Spade" }]);
+    await seed(t, 3, [{ name: "Spade" }]);
     const user = await as(t, 1).query(api.tools.listAll, opts(10));
     const admin = await as(t, 2).query(api.tools.listAll, opts(10));
     expect(admin.page).toEqual(user.page);
+  });
+
+  test("isMine is true only on the caller's own tools, and no owner is returned", async () => {
+    const t = await setup();
+    await seed(t, 1, [{ name: "Spade" }]);
+    await seed(t, 2, [{ name: "Rake" }]);
+    const mineOf = async (n: number) => {
+      const res = await as(t, n).query(api.tools.listAll, opts(10));
+      expect(JSON.stringify(res)).not.toMatch(/ownerId|User [12]/);
+      return Object.fromEntries(res.page.map((x) => [x.name, x.isMine]));
+    };
+    expect(await mineOf(1)).toEqual({ Spade: true, Rake: false });
+    expect(await mineOf(2)).toEqual({ Spade: false, Rake: true });
+  });
+
+  test("an admin who owns none of the tools sees isMine false everywhere", async () => {
+    const t = await setup(3);
+    await makeAdmin(t, 3);
+    await seed(t, 1, [{ name: "Spade" }]);
+    await seed(t, 2, [{ name: "Rake" }]);
+    const res = await as(t, 3).query(api.tools.listAll, opts(10));
+    expect(res.page.map((x) => x.isMine)).toEqual([false, false]);
   });
 
   test("the category filter returns only that category across owners, newest first", async () => {

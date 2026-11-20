@@ -203,14 +203,18 @@ function ToolCard({ tool }: { tool: ListedTool }) {
       </p>
       <p className="mt-2 break-words">{tool.description}</p>
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
-        {tool.availability !== "onLoan" &&
+        {tool.isMine ? (
+          <p className="text-sm font-medium">Your listing</p>
+        ) : (
+          tool.availability !== "onLoan" &&
           (showRequested ? (
             <p ref={requestedNote} tabIndex={-1} className="text-sm font-medium">
               You&apos;ve already requested this tool
             </p>
           ) : (
             <RequestForm toolId={tool._id} toolName={tool.name} onSending={(value) => (sending.current = value)} />
-          ))}
+          ))
+        )}
         <AdminRemove toolId={tool._id} toolName={tool.name} />
       </div>
     </li>

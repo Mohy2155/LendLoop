@@ -8,7 +8,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { PAGE_SIZE } from "../../convex/lib/paging";
 import { reminderText } from "../../convex/lib/reminderText";
 import { formatRange } from "../../convex/lib/requestDisplay";
-import { dangerOutlineButton, primaryButton, quietButton } from "./button-styles";
+import { dangerOutlineButton, primaryButton, primaryOutlineButton, quietButton } from "./button-styles";
 import { StatusBadge } from "./status-badge";
 import { Empty, Loading, LoadMore } from "./tool-board";
 
@@ -283,7 +283,7 @@ export function IncomingRequests() {
                       : "Another request is reserved. Cancel it to approve this one."}
                   </p>
                 ) : (
-                  <button type="button" className={primaryButton} aria-disabled={busy === r._id} onClick={() => act(r._id, "approve")}>
+                  <button type="button" className={primaryOutlineButton} aria-disabled={busy === r._id} onClick={() => act(r._id, "approve")}>
                     Approve<span className="sr-only"> {r.toolName}</span>
                   </button>
                 )}
