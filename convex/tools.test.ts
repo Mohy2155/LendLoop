@@ -168,7 +168,7 @@ describe("tools.listMine", () => {
     const mine = await as(t, 1).query(api.tools.listMine, {});
     expect(mine.map((tool) => tool.name)).toEqual(["Second", "First"]);
     for (const tool of mine) {
-      expect(Object.keys(tool).sort()).toEqual(["_id", "category", "condition", "description", "name"]);
+      expect(Object.keys(tool).sort()).toEqual(["_id", "category", "condition", "description", "name", "photos"]);
     }
   });
 
@@ -177,7 +177,7 @@ describe("tools.listMine", () => {
     await makeAdmin(t, 1);
     await create(t, 1);
     const [tool] = await as(t, 1).query(api.tools.listMine, {});
-    expect(Object.keys(tool).sort()).toEqual(["_id", "category", "condition", "description", "name"]);
+    expect(Object.keys(tool).sort()).toEqual(["_id", "category", "condition", "description", "name", "photos"]);
   });
 
   test("an admin sees only their own tools", async () => {

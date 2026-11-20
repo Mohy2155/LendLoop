@@ -16,6 +16,7 @@ export default defineSchema({
     category: categoryValidator,
     condition: conditionValidator,
     description: v.string(),
+    photos: v.optional(v.array(v.id("_storage"))), // owner's photos, first one is the cover; absent means none
   }).index("by_owner", ["ownerId"]).index("by_category", ["category"]),
 
   // An approved request is the loan. `toolName` is a copy so a request still reads if its tool is deleted.

@@ -138,7 +138,7 @@ describe("tools.listAll", () => {
     const res = await as(t, 1).query(api.tools.listAll, opts(10));
     expect(res.page).toHaveLength(2);
     for (const item of res.page)
-      expect(Object.keys(item).sort()).toEqual(["_id", "category", "condition", "description", "name", "onLoan"]);
+      expect(Object.keys(item).sort()).toEqual(["_id", "category", "condition", "description", "name", "onLoan", "photoUrl"]);
     expect(JSON.stringify(res)).not.toMatch(/ownerId|User 2/);
   });
 

@@ -85,11 +85,17 @@ A tool has a name, a category, a condition, a description and one owner (the use
 
 ### Permanent delete, and a cap
 
-Deleting a tool removes it. A tool is removed whether or not it has requests; its requests keep the saved tool name. One user can own at most 50 tools, so a single account cannot flood the board; the lists across all users are paged and bounded (see The tool board).
+Deleting a tool removes it. A tool is removed whether or not it has requests; its requests keep the saved tool name, and its stored photos are deleted with it. One user can own at most 50 tools, so a single account cannot flood the board; the lists across all users are paged and bounded (see The tool board).
 
 ### Error codes
 
-Failures use `NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`, `NOT_FOUND`, `INVALID_INPUT`, `OWN_TOOL`, `LIMIT_REACHED`, `NOT_PENDING`, `NOT_APPROVED` and `NOT_STARTED`. They describe only the caller's request, never other users' data. Argument-validator failures (a value outside a list, an id from another table) are plain errors with no code, so the interface falls back to a generic message for them.
+Failures use `NOT_SIGNED_IN`, `PROFILE_MISSING`, `FORBIDDEN`, `NOT_FOUND`, `INVALID_INPUT`, `OWN_TOOL`, `LIMIT_REACHED`, `PHOTO_LIMIT`, `INVALID_FILE` (returned, not thrown; see Photos), `NOT_PENDING`, `NOT_APPROVED` and `NOT_STARTED`. They describe only the caller's request, never other users' data. Argument-validator failures (a value outside a list, an id from another table) are plain errors with no code, so the interface falls back to a generic message for them.
+
+### Photos
+
+A tool can have up to 3 photos, for signed-in users only. Files live in Convex storage and the tool keeps a list of their ids. An upload is two steps, because Convex upload links cannot check a file: `tools.generatePhotoUploadUrl` (which also refuses a tool that already has 3), then `tools.addPhoto`, which reads the stored file's size and type and accepts only an exact `image/jpeg`, `image/png` or `image/webp` of at most 5 MB. A rejected file is deleted and reported as a result (`INVALID_FILE` or `PHOTO_LIMIT`) instead of an error, the one exception to throwing, because a thrown error would undo the deletion. A file that no longer exists, or an id already attached to one of the caller's tools, is refused without deleting anything, so a retry cannot remove a photo in use. Removing a photo, or deleting a tool, deletes the stored files that still exist. Two adds on one tool cannot pass the limit, because both write the same tool document and Convex runs them one after the other.
+
+The browser draws each chosen photo onto a canvas and uploads the result as a JPEG, at most 1600 pixels on the long side with a white background behind transparency. That removes location and other metadata and keeps files small; it protects honest uploads only, since a direct call to the backend can skip it. A photo the browser cannot read is refused and the original is never uploaded. `tools.listAll` returns only the first photo's link, `tools.listMine` returns every photo's id and link, and `tools.listPublic` is unchanged.
 
 ### The My listings page
 
@@ -97,7 +103,7 @@ One form serves adding and editing, and only one form is open at a time. A save 
 
 ### The tool board
 
-Two queries read the whole board. `tools.listPublic` is open to anyone, including a signed-in user who has no profile yet, and returns exactly name and category; it declares that return shape so a field added to `tools` later cannot leak through it by accident. `tools.listAll` requires a signed-in user with a profile, returns id, name, category, condition, description and whether the tool is on loan today, and takes an optional category. Neither returns owner details. They are separate functions so the public one contains no authorization branch.
+Two queries read the whole board. `tools.listPublic` is open to anyone, including a signed-in user who has no profile yet, and returns exactly name and category; it declares that return shape so a field added to `tools` later cannot leak through it by accident. `tools.listAll` requires a signed-in user with a profile, returns id, name, category, condition, description, whether the tool is on loan today and the link to its first photo, and takes an optional category. Neither returns owner details. They are separate functions so the public one contains no authorization branch.
 
 Both page newest first, 24 to a page. The client sends the whole paging options object, so the server rebuilds it: the page size is forced into 1 to 24 (NaN, zero and negatives included) and tool rows read per page are fixed at 48 (the client's own row and byte limits are discarded, since 0 or NaN would switch a cap off), because an end cursor from the client would otherwise make one page span every tool. When the cap is hit, Convex asks the client to split the page, which the paging hook does itself. The category filter uses the `by_category` index so filtered pages are full; filtering after loading would give short or empty pages.
 

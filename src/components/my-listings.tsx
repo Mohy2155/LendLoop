@@ -15,9 +15,10 @@ import {
   VISIBLE_TEXT,
 } from "../../convex/lib/toolOptions";
 import { dangerButton, primaryButton, quietButton } from "./button-styles";
+import { ToolPhotos } from "./tool-photos";
 
 type Tool = FunctionReturnType<typeof api.tools.listMine>[number];
-type ToolInput = Omit<Tool, "_id">;
+type ToolInput = Pick<Tool, "name" | "category" | "condition" | "description">;
 type FormValues = { name: string; category: string; condition: string; description: string };
 
 const EMPTY: FormValues = { name: "", category: "", condition: "", description: "" };
@@ -366,6 +367,7 @@ export function MyListings() {
                     </span>
                   </p>
                   <p className="mt-3 break-words whitespace-pre-line">{tool.description}</p>
+                  <ToolPhotos tool={tool} announce={setStatus} />
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       type="button"

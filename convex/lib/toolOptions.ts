@@ -26,5 +26,10 @@ export const NAME_MAX = 60;
 export const DESCRIPTION_MAX = 300;
 export const MAX_TOOLS_PER_USER = 50;
 
+// Photos: at most PHOTO_MAX per tool, of these exact types, each at most PHOTO_MAX_BYTES. The form uses the same values.
+export const PHOTO_MAX = 3;
+export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+export const PHOTO_TYPES: readonly string[] = ["image/jpeg", "image/png", "image/webp"];
+
 // Text must contain a letter or digit, so invisible characters and punctuation alone are not a name.
 export const VISIBLE_TEXT = /[\p{L}\p{N}]/u;
