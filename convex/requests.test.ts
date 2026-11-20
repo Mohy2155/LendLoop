@@ -631,17 +631,36 @@ describe("tools.listAll availability and requested", () => {
     expect((await listed(t, 2)).requested).toBe(false);
   });
 
-  test("the public list hides tools that are on loan and shows the rest, with name and category only", async () => {
+  test("the public list hides reserved and on-loan tools and shows the rest, with name and category only", async () => {
     const { t, drill } = await setup();
     await as(t, 1).mutation(api.tools.create, { name: "Saw", category: "Hand tools", condition: "Good", description: "x" });
+    await as(t, 1).mutation(api.tools.create, { name: "Rake", category: "Garden", condition: "Good", description: "x" });
+    const [saw, rake] = (await t.run((ctx) => ctx.db.query("tools").collect())).filter((x) => x.name !== "Drill");
     await seed(t, drill, "pickedUp");
-    const res = await t.query(api.tools.listPublic, opts);
-    expect(res.page).toEqual([{ name: "Saw", category: "Hand tools" }]);
+    await seed(t, saw._id, "approved");
+    expect((await t.query(api.tools.listPublic, opts)).page).toEqual([{ name: rake.name, category: "Garden" }]);
   });
 
-  test.each(["pending", "approved", "declined", "returned", "cancelled"] as const)("the public list still shows a tool whose request is %s", async (status) => {
+  test.each(["pending", "declined", "returned", "cancelled"] as const)("the public list still shows a tool whose request is %s", async (status) => {
     const { t, drill } = await setup();
     await seed(t, drill, status);
+    expect((await t.query(api.tools.listPublic, opts)).page).toEqual([{ name: "Drill", category: "Power tools" }]);
+  });
+
+  test("a reserved tool is hidden from the public list and listed again when the reservation is cancelled", async () => {
+    const { t, drill } = await setup();
+    const id = await seed(t, drill, "approved");
+    expect((await t.query(api.tools.listPublic, opts)).page).toEqual([]);
+    await as(t, 1).mutation(api.requests.cancel, { id });
+    expect((await t.query(api.tools.listPublic, opts)).page).toEqual([{ name: "Drill", category: "Power tools" }]);
+  });
+
+  test("a loan stays hidden from the public list after pickup and is listed again once it is marked returned", async () => {
+    const { t, drill } = await setup();
+    const id = await seed(t, drill, "approved");
+    await as(t, 2).mutation(api.requests.confirmPickup, { id });
+    expect((await t.query(api.tools.listPublic, opts)).page).toEqual([]);
+    await as(t, 1).mutation(api.requests.markReturned, { id });
     expect((await t.query(api.tools.listPublic, opts)).page).toEqual([{ name: "Drill", category: "Power tools" }]);
   });
 });

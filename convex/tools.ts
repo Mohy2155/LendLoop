@@ -212,17 +212,17 @@ export async function hasOpenRequest(ctx: { db: DatabaseReader }, toolId: Id<"to
 // Reads of the whole board. Each builds its items field by field, never from the row itself,
 // so a field added to `tools` later is not exposed by accident.
 
-/** Open to anyone, including signed-out visitors: name and category only, tools that are not on loan. */
+/** Open to anyone, including signed-out visitors: name and category only, and only available tools (not reserved, not on loan). */
 export const listPublic = query({
   args: { paginationOpts: paginationOptsValidator },
   returns: paginationResultValidator(v.object({ name: v.string(), category: categoryValidator })),
   handler: async (ctx, { paginationOpts }) => {
     const result = await ctx.db.query("tools").order("desc").paginate(safePaging(paginationOpts));
-    // A page can come back shorter than requested (or empty) when some of its tools are on loan.
+    // A page can come back shorter than requested (or empty) when some of its tools are reserved or on loan.
     const states = await Promise.all(result.page.map((tool) => toolState(ctx, tool._id)));
     return {
       ...result,
-      page: result.page.filter((_, i) => !states[i].onLoan).map(({ name, category }) => ({ name, category })),
+      page: result.page.filter((_, i) => !states[i].onLoan && !states[i].reserved).map(({ name, category }) => ({ name, category })),
     };
   },
 });

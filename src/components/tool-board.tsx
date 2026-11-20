@@ -93,7 +93,7 @@ export const pill = "rounded-full border border-border px-2";
 function PublicList() {
   const { results, status, loadMore } = usePaginatedQuery(api.tools.listPublic, {}, { initialNumItems: PAGE_SIZE });
   const none = "No tools have been listed yet.";
-  // A page can be empty while more remain (its tools were on loan), so "empty" means exhausted.
+  // A page can be empty while more remain (its tools were reserved or on loan), so "empty" means exhausted.
   if (status === "LoadingFirstPage" || (results.length === 0 && status === "Exhausted"))
     return (
       <>
