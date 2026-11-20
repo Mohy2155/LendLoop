@@ -30,7 +30,15 @@ export default defineSchema({
   })
     .index("by_borrower", ["borrowerId"])
     .index("by_owner", ["ownerId"])
-    .index("by_tool_status", ["toolId", "status"]),
+    .index("by_tool_status", ["toolId", "status"])
+    .index("by_status_endDate", ["status", "endDate"]),
+
+  // One row per loan per day: the write-back from the daily reminder workflow. `day` is the UTC date the run fetched.
+  reminders: defineTable({
+    requestId: v.id("requests"),
+    day: v.string(), // YYYY-MM-DD
+    sentAt: v.number(),
+  }).index("by_request_day", ["requestId", "day"]),
 
   // Single row; hands out the number in "Neighbor N" for users who have no name.
   neighborCounter: defineTable({ next: v.number() }),

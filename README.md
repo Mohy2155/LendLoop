@@ -4,7 +4,7 @@
 
 LendLoop is a neighborhood tool-lending board. Neighbors list tools they are happy to lend, ask to borrow from each other for a date range, and get automated notifications and reminders through n8n.
 
-> **Status:** work in progress. The app shell (layout, sign-in, route protection) and user accounts with roles are done, neighbors can list their own tools on the My listings page, and the board of tools is browsable (a public list on the home page, a category-filtered list for signed-in users). Neighbors can ask to borrow a tool for a date range and owners approve or decline (My requests, Incoming requests). Request notifications through n8n are in place (see [n8n notifications](#n8n-notifications)); the daily overdue reminders are being added next. The sections below describe what exists today and are extended as each part lands.
+> **Status:** work in progress. The app shell (layout, sign-in, route protection) and user accounts with roles are done, neighbors can list their own tools on the My listings page, and the board of tools is browsable (a public list on the home page, a category-filtered list for signed-in users). Neighbors can ask to borrow a tool for a date range and owners approve or decline (My requests, Incoming requests). Request notifications through n8n are in place (see [n8n notifications](#n8n-notifications)); daily overdue reminders are sent by a second n8n workflow (see [Overdue reminders](#overdue-reminders)). The sections below describe what exists today and are extended as each part lands.
 
 ## Stack
 
@@ -68,8 +68,9 @@ Real values go in `.env.local` (git-ignored). `.env.example` lists every variabl
 | `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `.env.local` | Where to land after sign-in when no return address exists (`/tools`). Do not add `*_FORCE_REDIRECT_URL`: it overrides return-after-sign-in |
 | `CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL` | `.env.local` (written by `npx convex dev`) | Which Convex deployment the app talks to |
 | `CLERK_FRONTEND_API_URL` | Convex deployment env (`npx convex env set`) | Lets Convex verify Clerk-issued tokens. The deploy fails with a clear message if it is missing |
-| `N8N_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET` | Convex deployment env (`npx convex env set`) | Where Convex sends the signed notification webhook and the secret it signs with. If either is missing the send fails and shows as failed in the Convex dashboard |
-| `LENDLOOP_WEBHOOK_SECRET`, `WEBHOOK_URL` | `n8n/.env` (git-ignored; `n8n/.env.example` has placeholders) | The same secret, used by n8n to verify each call, and n8n's public base URL |
+| `N8N_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET` | Convex deployment env (`npx convex env set`) | Where Convex sends the signed notification webhook and the secret it signs with. The same secret verifies the calls n8n makes to the reminder routes. If either is missing the send fails and shows as failed in the Convex dashboard; with no secret the routes answer 401 |
+| `LENDLOOP_WEBHOOK_SECRET`, `WEBHOOK_URL` | `n8n/.env` (git-ignored; `n8n/.env.example` has placeholders) | The same secret, used by n8n to verify each call and to sign its own, and n8n's public base URL |
+| `CONVEX_SITE_URL` | `n8n/.env` | The `.convex.site` address of your deployment, which the reminder workflow calls (no trailing slash) |
 
 ### Making someone an admin
 
@@ -77,7 +78,7 @@ Everyone starts with the `user` role. There is deliberately no function or scree
 
 ## n8n notifications
 
-When a borrow request is created, approved, declined or marked returned, Convex sends a signed webhook to n8n, and an n8n workflow writes a logged mock notification for the person concerned (the owner for a new request, the borrower otherwise). The workflow files are in [`n8n/workflows`](n8n/workflows): `request-notification.json` and `error-handler.json`.
+When a borrow request is created, approved, declined or marked returned, Convex sends a signed webhook to n8n, and an n8n workflow writes a logged mock notification for the person concerned (the owner for a new request, the borrower otherwise). The workflow files are in [`n8n/workflows`](n8n/workflows).
 
 1. Copy `n8n/.env.example` to `n8n/.env` and set `LENDLOOP_WEBHOOK_SECRET` to a long random string (for example `openssl rand -hex 32`).
 2. Start n8n and open http://localhost:5678 to create the owner account:
@@ -87,12 +88,13 @@ When a borrow request is created, approved, declined or marked returned, Convex 
    docker compose up -d
    ```
 
-3. Import and publish both workflows once (the import needs the owner account to exist, and imported workflows start unpublished). In Git Bash on Windows, put `MSYS_NO_PATHCONV=1` in front of the first command so `/workflows` is not rewritten to a Windows path:
+3. Import and publish the workflows once (the import needs the owner account to exist, and imported workflows start unpublished). This imports all three workflow files, including the overdue-reminders one described below. In Git Bash on Windows, put `MSYS_NO_PATHCONV=1` in front of the first command so `/workflows` is not rewritten to a Windows path:
 
    ```bash
    docker compose exec n8n n8n import:workflow --separate --input=/workflows
    docker compose exec n8n n8n publish:workflow --id=LendLoopRequests
    docker compose exec n8n n8n publish:workflow --id=LendLoopErrors01
+   docker compose exec n8n n8n publish:workflow --id=LendLoopReminders
    docker compose restart n8n
    ```
 
@@ -105,6 +107,24 @@ When a borrow request is created, approved, declined or marked returned, Convex 
 
 Notifications appear in the n8n **Executions** tab and in the container log (`docker compose logs -f n8n`). A failed run also writes a line from the error handler. To check the workflow without the app, send a signed call yourself: the body is JSON, `x-lendloop-timestamp` is the current time in milliseconds and `x-lendloop-signature` is the lowercase hex HMAC-SHA256 of `<timestamp>.<body>` with the secret.
 
+### Overdue reminders
+
+A second workflow, `overdue-reminders.json`, runs every day at 09:00 UTC. It calls a signed endpoint on your Convex deployment for the overdue loans (approved loans whose end date has passed), writes a logged mock reminder for each borrower, and writes each reminder back to Convex. A loan shows "Reminder sent 2 days ago" in My requests, Incoming requests and the Admin loans list. A loan gets one reminder per day until it is marked returned.
+
+Unlike the notification webhook, n8n calls out to Convex, so no tunnel is needed. To set it up:
+
+1. In `n8n/.env`, set `CONVEX_SITE_URL` to your deployment's `.convex.site` address (the value of `NEXT_PUBLIC_CONVEX_SITE_URL` in `.env.local`, with no trailing slash), then run `docker compose up -d` again, because a restart does not re-read `.env`.
+2. Make sure Convex has the same secret n8n has: `npx convex env set N8N_WEBHOOK_SECRET <the same secret>`. The HTTP routes use this variable too.
+3. Import and publish the workflow. On a new install the commands in the section above import all three workflows; publish `LendLoopReminders` as well. On an existing install, import only the new file, because re-importing all of them unpublishes the others:
+
+   ```bash
+   MSYS_NO_PATHCONV=1 docker compose exec n8n n8n import:workflow --input=/workflows/overdue-reminders.json
+   docker compose exec n8n n8n publish:workflow --id=LendLoopReminders
+   docker compose restart n8n
+   ```
+
+Reminders appear in the container log as `[reminder] to <name>: ...`. If a run fails (for example Convex is unreachable), the failing step tries up to three times and then the error workflow logs it. To recover, start a new run; n8n's own Retry button on the failed run is refused once its signature is older than 5 minutes. A new run only lists loans that have no reminder recorded for the day, so loans that already succeeded are not reminded twice. If every call is refused with 401 after your PC wakes from sleep, the Docker clock has drifted: restart Docker Desktop (or run `wsl --shutdown`).
+
 ## Architecture (so far)
 
 ```
@@ -113,9 +133,12 @@ Browser ── Next.js (App Router)
             │  ClerkProvider ─ sign-in / sign-up / session
             └─ ConvexProviderWithClerk ──► Convex (data + functions)
                                            validates the Clerk token, enforces access rules
-                                           tables: users, tools, requests, neighborCounter
+                                           tables: users, tools, requests, reminders, neighborCounter
                                                │  request created / status changed
-                                               └─ signed webhook ──► n8n (verify, notify, error workflow)
+                                               ├─ signed webhook ──► n8n (verify, notify, error workflow)
+                                               │
+                                               └─ HTTP routes /overdue-loans, /reminders
+                                                  ◄── n8n daily schedule (signed calls)
 ```
 
 - **Public pages:** `/` (with a read-only list of tool names and categories), `/sign-in`, `/sign-up`.
@@ -136,6 +159,7 @@ The reasoning behind each choice is in [`docs/design-decisions.md`](docs/design-
 - **Borrow requests follow the brief and nothing more.** A request is for one tool and a date range and starts pending; only the tool's owner can approve or decline it (an admin who is not the owner cannot), and each person sees only their own requests. An approved request is the loan, and the Tools list shows whether a tool is on loan today (by the server's UTC date). Only the lender can mark a loan returned, and only once it has started; a returned loan frees the tool. Not restricted yet, because the brief does not ask for it: overlapping approved requests, cancelling, requesting your own tool, and deleting a tool that has requests.
 - **Admin powers are separate functions, checked in Convex.** An admin can remove any listing (a separate function from the owner's delete, with no extra rule: its requests keep the saved tool name), view all loans (approved and returned requests, with the owner's and borrower's display names) and mark or unmark a user as a Trusted Lender. The Trusted Lender flag is shown on the Admin page only, and no other function returns it. The Admin page and link are display only; a non-admin who opens the page gets no data. The loans list is filtered while paging, so a page can be short or empty while later pages hold loans.
 - **The Convex to n8n call is signed, minimal and visible when it fails.** Each webhook carries an HMAC-SHA256 signature over a timestamp and the exact body; n8n verifies it in constant time and rejects calls older or newer than 5 minutes before doing anything. The body holds only the status, tool name, dates and display names (the owner's name only on a new request), never a description, id or email. Convex makes up to three delivery attempts; n8n has an error workflow. Details and accepted limits are in the design decisions.
+- **The reminder routes answer only signed calls.** n8n signs each call to Convex with the same HMAC scheme, over the timestamp, method, path and body, so a signature for one route is not valid on the other. The overdue list carries only a request id, tool name, end date and the borrower's name. Reminders are recorded once per loan per day, so a retry never creates a duplicate row or a second reminder. Details are in the design decisions.
 - **No secrets in the repository.** Keys live in `.env.local` and in Convex and n8n environment settings; `.env.example` holds names only.
 
 ## Production notes

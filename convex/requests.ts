@@ -2,17 +2,13 @@ import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/access";
+import { isDay } from "./lib/day";
+import { lastReminderAt } from "./lib/lastReminder";
 import { queueNotification } from "./lib/notify";
 import { safePaging } from "./lib/paging";
 
 // Order of checks: argument validators, requireUser, lookup (NOT_FOUND), ownership (FORBIDDEN),
 // state (NOT_PENDING / NOT_APPROVED / NOT_STARTED), dates (INVALID_INPUT). None takes an owner, borrower or status.
-
-/** A real calendar day written YYYY-MM-DD (rejects 2026-02-31). */
-function isDay(value: string) {
-  const date = new Date(`${value}T00:00:00Z`);
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
 
 export const create = mutation({
   args: { toolId: v.id("tools"), startDate: v.string(), endDate: v.string() },
@@ -69,16 +65,17 @@ export const listMine = query({
       .withIndex("by_borrower", (q) => q.eq("borrowerId", user._id))
       .order("desc")
       .paginate(safePaging(paginationOpts));
-    return {
-      ...result,
-      page: result.page.map(({ _id, toolName, startDate, endDate, status }) => ({
+    const page = await Promise.all(
+      result.page.map(async ({ _id, toolName, startDate, endDate, status }) => ({
         _id,
         toolName,
         startDate,
         endDate,
         status,
+        lastReminderAt: await lastReminderAt(ctx, _id),
       })),
-    };
+    );
+    return { ...result, page };
   },
 });
 
@@ -94,7 +91,15 @@ export const listIncoming = query({
     const page = await Promise.all(
       result.page.map(async ({ _id, toolName, startDate, endDate, status, borrowerId }) => {
         const borrower = await ctx.db.get("users", borrowerId);
-        return { _id, toolName, startDate, endDate, status, borrowerName: borrower?.displayName ?? "Unknown neighbor" };
+        return {
+          _id,
+          toolName,
+          startDate,
+          endDate,
+          status,
+          borrowerName: borrower?.displayName ?? "Unknown neighbor",
+          lastReminderAt: await lastReminderAt(ctx, _id),
+        };
       }),
     );
     return { ...result, page };

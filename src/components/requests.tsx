@@ -6,6 +6,7 @@ import { ConvexError } from "convex/values";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { PAGE_SIZE } from "../../convex/lib/paging";
+import { reminderText } from "../../convex/lib/reminderText";
 import { primaryButton, quietButton } from "./button-styles";
 import { Empty, Loading, LoadMore, pill } from "./tool-board";
 
@@ -28,6 +29,13 @@ export function requestMessage(error: unknown, fallback: string) {
     default:
       return fallback;
   }
+}
+
+/** "Reminder sent 2 days ago" when an automated reminder was recorded for the loan; nothing otherwise. */
+export function ReminderLine({ at }: { at: number | undefined }) {
+  const [now] = useState(() => Date.now()); // read once per mount, so render stays pure
+  const text = reminderText(at, now);
+  return text ? <span>{text}</span> : null;
 }
 
 function dates(start: string, end: string) {
@@ -127,6 +135,7 @@ export function MyRequests() {
                 <span className="sr-only">Status: </span>
                 {r.status}
               </span>
+              <ReminderLine at={r.lastReminderAt} />
             </p>
           </li>
         ))}
@@ -183,6 +192,7 @@ export function IncomingRequests() {
                 <span className="sr-only">Status: </span>
                 {r.status}
               </span>
+              <ReminderLine at={r.lastReminderAt} />
             </p>
             {r.status === "pending" && (
               <div className="mt-3 flex gap-2">
