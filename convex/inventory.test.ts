@@ -11,6 +11,9 @@ const EXPECTED: Record<string, "identity" | "public" | "requireUser" | "requireA
   "tools:listMine": "requireUser",
   "tools:update": "requireUser",
   "tools:remove": "requireUser",
+  "tools:generatePhotoUploadUrl": "requireUser",
+  "tools:addPhoto": "requireUser",
+  "tools:removePhoto": "requireUser",
   "tools:listPublic": "public", // name and category only
   "tools:listAll": "requireUser",
   "requests:create": "requireUser",

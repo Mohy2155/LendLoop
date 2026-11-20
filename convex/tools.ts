@@ -1,7 +1,7 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireAdmin, requireUser } from "./lib/access";
 import { safePaging } from "./lib/paging";
 import {
@@ -10,6 +10,9 @@ import {
   DESCRIPTION_MAX,
   MAX_TOOLS_PER_USER,
   NAME_MAX,
+  PHOTO_MAX,
+  PHOTO_MAX_BYTES,
+  PHOTO_TYPES,
   VISIBLE_TEXT,
 } from "./lib/toolOptions";
 
@@ -57,6 +60,75 @@ export const create = mutation({
   },
 });
 
+/** Deletes stored files that still exist (a file removed elsewhere must not block deleting the tool). */
+async function deleteFiles(ctx: MutationCtx, ids: Id<"_storage">[]) {
+  for (const id of ids) if (await ctx.db.system.get("_storage", id)) await ctx.storage.delete(id);
+}
+
+/** A photo's id with its URL; photos whose file is gone are left out. */
+async function photoEntries(ctx: QueryCtx, ids: Id<"_storage">[]) {
+  const urls = await Promise.all(ids.map((id) => ctx.storage.getUrl(id)));
+  return ids.flatMap((id, i) => (urls[i] ? [{ id, url: urls[i] }] : []));
+}
+
+/** The tool for a photo action: signed in, found, and owned by the caller (any role). */
+async function ownedTool(ctx: MutationCtx, id: Id<"tools">) {
+  const user = await requireUser(ctx);
+  const tool = await ctx.db.get("tools", id);
+  if (!tool) throw new ConvexError({ code: "NOT_FOUND" });
+  if (tool.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
+  return { user, tool };
+}
+
+export const generatePhotoUploadUrl = mutation({
+  args: { id: v.id("tools") },
+  handler: async (ctx, { id }) => {
+    const { tool } = await ownedTool(ctx, id);
+    if ((tool.photos?.length ?? 0) >= PHOTO_MAX) throw new ConvexError({ code: "PHOTO_LIMIT" });
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * Attaches an uploaded file. A rejected file is deleted and reported as a result, not thrown:
+ * a thrown error would roll the deletion back. A missing file, or one already attached to any of the
+ * caller's tools, is refused without deleting anything, so a retry cannot remove a photo in use.
+ */
+export const addPhoto = mutation({
+  args: { id: v.id("tools"), storageId: v.id("_storage") },
+  handler: async (ctx, { id, storageId }) => {
+    const { user, tool } = await ownedTool(ctx, id);
+    const file = await ctx.db.system.get("_storage", storageId);
+    const owned = await ctx.db
+      .query("tools")
+      .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
+      .take(MAX_TOOLS_PER_USER);
+    if (!file || owned.some((t) => t.photos?.includes(storageId))) return { ok: false, code: "INVALID_FILE" } as const;
+    const photos = tool.photos ?? [];
+    if (!PHOTO_TYPES.includes(file.contentType ?? "") || file.size > PHOTO_MAX_BYTES) {
+      await ctx.storage.delete(storageId);
+      return { ok: false, code: "INVALID_FILE" } as const;
+    }
+    if (photos.length >= PHOTO_MAX) {
+      await ctx.storage.delete(storageId);
+      return { ok: false, code: "PHOTO_LIMIT" } as const;
+    }
+    await ctx.db.patch("tools", id, { photos: [...photos, storageId] });
+    return { ok: true } as const;
+  },
+});
+
+export const removePhoto = mutation({
+  args: { id: v.id("tools"), storageId: v.id("_storage") },
+  handler: async (ctx, { id, storageId }) => {
+    const { tool } = await ownedTool(ctx, id);
+    const photos = tool.photos ?? [];
+    if (!photos.includes(storageId)) throw new ConvexError({ code: "NOT_FOUND" });
+    await ctx.db.patch("tools", id, { photos: photos.filter((p) => p !== storageId) });
+    await deleteFiles(ctx, [storageId]);
+  },
+});
+
 export const listMine = query({
   args: {},
   handler: async (ctx) => {
@@ -66,13 +138,16 @@ export const listMine = query({
       .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
       .order("desc")
       .collect(); // bounded by MAX_TOOLS_PER_USER
-    return tools.map(({ _id, name, category, condition, description }) => ({
-      _id,
-      name,
-      category,
-      condition,
-      description,
-    }));
+    return Promise.all(
+      tools.map(async ({ _id, name, category, condition, description, photos }) => ({
+        _id,
+        name,
+        category,
+        condition,
+        description,
+        photos: await photoEntries(ctx, photos ?? []),
+      })),
+    );
   },
 });
 
@@ -95,6 +170,7 @@ export const remove = mutation({
     const tool = await ctx.db.get("tools", id);
     if (!tool) throw new ConvexError({ code: "NOT_FOUND" });
     if (tool.ownerId !== user._id) throw new ConvexError({ code: "FORBIDDEN" });
+    await deleteFiles(ctx, tool.photos ?? []);
     await ctx.db.delete("tools", id);
   },
 });
@@ -104,7 +180,9 @@ export const removeAny = mutation({
   args: { id: v.id("tools") },
   handler: async (ctx, { id }) => {
     await requireAdmin(ctx);
-    if (!(await ctx.db.get("tools", id))) throw new ConvexError({ code: "NOT_FOUND" });
+    const tool = await ctx.db.get("tools", id);
+    if (!tool) throw new ConvexError({ code: "NOT_FOUND" });
+    await deleteFiles(ctx, tool.photos ?? []);
     await ctx.db.delete("tools", id);
   },
 });
@@ -151,13 +229,14 @@ export const listAll = query({
     // Note: uses the server's UTC date; not refreshed until the query re-runs.
     const today = new Date().toISOString().slice(0, 10);
     const page = await Promise.all(
-      result.page.map(async ({ _id, name, category, condition, description }) => ({
+      result.page.map(async ({ _id, name, category, condition, description, photos }) => ({
         _id,
         name,
         category,
         condition,
         description,
         onLoan: await onLoanToday(ctx, _id, today),
+        photoUrl: photos?.[0] ? await ctx.storage.getUrl(photos[0]) : null,
       })),
     );
     return { ...result, page };

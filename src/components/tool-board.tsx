@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePaginatedQuery, type PaginationStatus } from "convex/react";
 import { catchError, type ErrorInfo } from "next/error";
+import Image from "next/image";
 import { api } from "../../convex/_generated/api";
 import { PAGE_SIZE } from "../../convex/lib/paging";
 import { CATEGORIES, type Category } from "../../convex/lib/toolOptions";
@@ -179,6 +180,16 @@ export function AllTools() {
           <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((tool) => (
               <li key={tool._id} className="flex min-w-0 flex-col rounded-md border border-border bg-surface p-4">
+                {tool.photoUrl && (
+                  <Image
+                    src={tool.photoUrl}
+                    alt={`Photo of ${tool.name}`}
+                    width={320}
+                    height={240}
+                    unoptimized
+                    className="mb-3 aspect-[4/3] w-full rounded-md border border-border object-cover"
+                  />
+                )}
                 <h2 className="text-lg font-semibold break-words">{tool.name}</h2>
                 <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
                   <span className={pill}>
