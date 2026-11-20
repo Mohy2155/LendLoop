@@ -6,7 +6,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 /**
  * Approved loans whose end date is before `day` (YYYY-MM-DD, UTC) and that have no reminder for `day`.
  * Items are built field by field: only what the reminder needs.
- * shortcut: reads every overdue loan in one call, fine at neighborhood scale; page it if that stops being true.
+ * Note: reads every overdue loan in one call, fine at neighborhood scale; page it if that stops being true.
  */
 export const overdue = internalQuery({
   args: { day: v.string() },

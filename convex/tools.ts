@@ -111,7 +111,7 @@ export const removeAny = mutation({
 
 /**
  * True when an approved request for the tool includes `today` (YYYY-MM-DD, UTC).
- * shortcut: reads all of the tool's approved requests; fine until a tool has thousands.
+ * Note: reads all of the tool's approved requests; fine until a tool has thousands.
  */
 async function onLoanToday(ctx: QueryCtx, toolId: Id<"tools">, today: string) {
   const approved = await ctx.db
@@ -148,7 +148,7 @@ export const listAll = query({
       ? ctx.db.query("tools").withIndex("by_category", (q) => q.eq("category", category))
       : ctx.db.query("tools");
     const result = await tools.order("desc").paginate(safePaging(paginationOpts));
-    // shortcut: uses the server's UTC date; not refreshed until the query re-runs.
+    // Note: uses the server's UTC date; not refreshed until the query re-runs.
     const today = new Date().toISOString().slice(0, 10);
     const page = await Promise.all(
       result.page.map(async ({ _id, name, category, condition, description }) => ({

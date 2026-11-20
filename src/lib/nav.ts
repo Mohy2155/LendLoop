@@ -5,7 +5,7 @@ export type NavItem = {
   adminOnly?: boolean;
 };
 
-/** Signed-in destinations, in display order. Later changes add entries here. */
+/** Signed-in destinations, in display order. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: "Tools", href: "/tools" },
   { label: "My listings", href: "/my-listings" },

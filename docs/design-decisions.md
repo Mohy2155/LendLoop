@@ -1,6 +1,6 @@
 # Design decisions
 
-Each section records a decision, the reason, and the alternative that was rejected. New sections are added as each part of the app lands.
+Each section records a decision, the reason, and the alternative that was rejected.
 
 ## App shell
 
@@ -41,7 +41,7 @@ The header's auth controls use Clerk's client-side `Show` inside a fixed-size sl
 
 ### Out of scope for the shell
 
-No data model, roles, or Convex functions. Those arrive with listings, requests and roles, each stating which Convex function enforces which rule.
+No data model, roles, or Convex functions. These are described in the sections below, each stating which Convex function enforces which rule.
 
 ## Users and roles
 
@@ -51,7 +51,7 @@ A signed-in user gets one profile (`users` table: identity, display name, role, 
 
 ### Display names
 
-The name comes from a claim in Clerk's session token (see the setup step in the README); the profile refreshes it whenever the user next opens the app and the name changed. A user without a name is called "Neighbor N", where N comes from a counter that never repeats a number. Email addresses are not stored; a later change adds one only if a feature needs it.
+The name comes from a claim in Clerk's session token (see the setup step in the README); the profile refreshes it whenever the user next opens the app and the name changed. A user without a name is called "Neighbor N", where N comes from a counter that never repeats a number. Email addresses are not stored.
 
 ### Roles are enforced in the backend, from the database
 
@@ -59,7 +59,7 @@ The role is read from the stored profile on every call, not from the token, so a
 
 ### Admin is set by hand
 
-There is a single administrator and the brief does not call for a promotion flow, so no code grants admin: the owner edits the `role` field in the Convex dashboard. No public function accepts a role.
+There is a single administrator and a promotion flow is not needed, so no code grants admin: the owner edits the `role` field in the Convex dashboard. No public function accepts a role.
 
 ### Guarding against a forgotten check
 
@@ -77,7 +77,7 @@ Convex functions are tested with Vitest and `convex-test`. Vitest 4 is used beca
 
 ### Fields and fixed lists
 
-A tool has a name, a category, a condition, a description and one owner (the user who created it). Category (Power tools, Hand tools, Garden, Ladders and access, Cleaning, Other) and condition (New, Good, Fair, Worn) are fixed lists, so the category filter added later stays clean instead of filling with near-duplicates like "Drill" and "drills". The lists, the text limits (name 1 to 60, description 1 to 300 characters after trimming, each containing at least one letter or digit so invisible characters or punctuation alone cannot make a blank-looking name) and the per-user cap live in `convex/lib/toolOptions.ts`, shared by the schema, the functions and the form. The values are stored as their labels. Adding a value is a one-line change; renaming or removing one needs a data migration, because Convex checks stored documents against the schema.
+A tool has a name, a category, a condition, a description and one owner (the user who created it). Category (Power tools, Hand tools, Garden, Ladders and access, Cleaning, Other) and condition (New, Good, Fair, Worn) are fixed lists, so the category filter stays clean instead of filling with near-duplicates like "Drill" and "drills". The lists, the text limits (name 1 to 60, description 1 to 300 characters after trimming, each containing at least one letter or digit so invisible characters or punctuation alone cannot make a blank-looking name) and the per-user cap live in `convex/lib/toolOptions.ts`, shared by the schema, the functions and the form. The values are stored as their labels. Adding a value is a one-line change; renaming or removing one needs a data migration, because Convex checks stored documents against the schema.
 
 ### Ownership, enforced in the backend
 
@@ -85,7 +85,7 @@ A tool has a name, a category, a condition, a description and one owner (the use
 
 ### Permanent delete, and a cap
 
-Deleting a tool removes it. A tool is removed whether or not it has requests; its requests keep the saved tool name. One user can own at most 50 tools, so a single account cannot flood the board; a later list across all users still has to be bounded or paginated.
+Deleting a tool removes it. A tool is removed whether or not it has requests; its requests keep the saved tool name. One user can own at most 50 tools, so a single account cannot flood the board; the lists across all users are paged and bounded (see The tool board).
 
 ### Error codes
 
@@ -97,7 +97,7 @@ One form serves adding and editing, and only one form is open at a time. A save 
 
 ### The tool board
 
-Two queries read the whole board. `tools.listPublic` is open to anyone, including a signed-in user who has no profile yet, and returns exactly name and category; it declares that return shape so a field added to `tools` later cannot leak through it by accident. `tools.listAll` requires a signed-in user with a profile, returns id, name, category, condition and description, and takes an optional category. Neither returns owner details. They are separate functions so the public one contains no authorization branch.
+Two queries read the whole board. `tools.listPublic` is open to anyone, including a signed-in user who has no profile yet, and returns exactly name and category; it declares that return shape so a field added to `tools` later cannot leak through it by accident. `tools.listAll` requires a signed-in user with a profile, returns id, name, category, condition, description and whether the tool is on loan today, and takes an optional category. Neither returns owner details. They are separate functions so the public one contains no authorization branch.
 
 Both page newest first, 24 to a page. The client sends the whole paging options object, so the server rebuilds it: the page size is forced into 1 to 24 (NaN, zero and negatives included) and tool rows read per page are fixed at 48 (the client's own row and byte limits are discarded, since 0 or NaN would switch a cap off), because an end cursor from the client would otherwise make one page span every tool. When the cap is hit, Convex asks the client to split the page, which the paging hook does itself. The category filter uses the `by_category` index so filtered pages are full; filtering after loading would give short or empty pages.
 
@@ -113,7 +113,7 @@ The signed-in tool list reports whether a tool is on loan today: an approved req
 
 `requests.markReturned` takes only the request id and works only for the request's owner, whatever their role, on an approved loan that has already started (start date not after today, UTC), so a future loan cannot be marked returned. A returned loan no longer counts as on loan.
 
-Deliberately not handled, since the brief does not ask for it: overlapping approved requests, cancelling a request, requesting your own tool, limits on how many requests someone can make, and deleting a tool that has requests.
+Deliberately not handled: overlapping approved requests, cancelling a request, requesting your own tool, limits on how many requests someone can make, and deleting a tool that has requests.
 
 ## Admin
 
@@ -127,15 +127,15 @@ The loans list filters by status while paging, so a page can be short or empty w
 
 Creating a request and each status change (approved, declined, returned) schedules one webhook call to n8n from inside the same Convex mutation. Because it is scheduled in the mutation's transaction, a refused action sends nothing, and because a separate action does the sending, a slow or broken n8n never changes what the user sees. The scheduling lives in `convex/lib/notify.ts` and the sending in `convex/notify.ts`.
 
-**What is sent.** The status, tool name, start and end dates and the borrower's display name, plus the owner's display name only on a new request (the owner is the person addressed). Borrower-facing messages never name the owner, because the app hides the owner from borrowers. No description, ids, emails, role or Trusted Lender flag are sent. The payload is built field by field from named fields. A display name is not a unique recipient, so the logged mock addresses people by name only; a real channel would need a recipient address, which the brief does not ask for.
+**What is sent.** The status, tool name, start and end dates and the borrower's display name, plus the owner's display name only on a new request (the owner is the person addressed). Borrower-facing messages never name the owner, because the app hides the owner from borrowers. No description, ids, emails, role or Trusted Lender flag are sent. The payload is built field by field from named fields. A display name is not a unique recipient, so the logged mock addresses people by name only; a real channel would need a recipient address, which the app does not store.
 
 **Signature.** The body is serialized once, and `HMAC-SHA256(secret, timestamp + "." + body)` (hex) is sent as `x-lendloop-signature` with the timestamp in `x-lendloop-timestamp`. n8n hashes the raw bytes it received (not re-serialized JSON), compares in constant time, and answers 401 for a missing, malformed or wrong signature, a non-numeric timestamp, or a timestamp more than 5 minutes in the past or future. The check never throws: any exception, an empty or multipart body or a missing or empty secret also gives 401, so junk requests cannot fill the error log. Forged calls need the secret; changing a captured body breaks the signature; a replay inside the 5-minute window is possible and accepted, because the only effect is a repeated mock notification. There is no nonce store.
 
 **Secrets.** The secret exists only in the Convex deployment env, in `n8n/.env` (git-ignored) and in the n8n container's environment. The exported workflows contain only the variable name, no credentials block and no saved test data. n8n reads it with `$env`, which requires `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`; that exposes the container's environment to Code nodes, so only people you trust should edit workflows on this instance. The webhook path is in the repository and is not secret: the signature is the protection.
 
-**Failures.** Convex makes up to three attempts (10 seconds, then 60 seconds apart) when n8n is unreachable or answers 5xx or 429, signing each attempt with a fresh timestamp. Any other 4xx (for example 401 from a wrong secret) is a configuration problem and is not retried. A missing URL or secret, or a last failed attempt, ends the scheduled run as failed, visible in the Convex dashboard. In n8n n8n tries the notification step up to three times and the workflow's error workflow logs the workflow name, execution id and message. n8n answers 200 as soon as the signature is verified, so a later failure inside n8n is reported once by the error workflow and does not make Convex resend. If n8n processed a call but the reply was lost, a retry can send the same notification twice; accepted, since nothing is written back and the brief's idempotency rule applies to write-backs.
+**Failures.** Convex makes up to three attempts (10 seconds, then 60 seconds apart) when n8n is unreachable or answers 5xx or 429, signing each attempt with a fresh timestamp. Any other 4xx (for example 401 from a wrong secret) is a configuration problem and is not retried. A missing URL or secret, or a last failed attempt, ends the scheduled run as failed, visible in the Convex dashboard. In n8n the notification step is tried up to three times and the workflow's error workflow logs the workflow name, execution id and message. n8n answers 200 as soon as the signature is verified, so a later failure inside n8n is reported once by the error workflow and does not make Convex resend. If n8n processed a call but the reply was lost, a retry can send the same notification twice; accepted, since nothing is written back and idempotency is enforced on write-backs.
 
-**Where the data sits.** The payload (names and dates) is also stored in Convex's scheduled-function arguments in n8n's saved execution data and, for the logged mock notification, in the container log; they follow those systems' retention settings.
+**Where the data sits.** The payload (names and dates) is also stored in Convex's scheduled-function arguments, in n8n's saved execution data and, for the logged mock notification, in the container log; they follow those systems' retention settings.
 
 **Running n8n.** `n8n/docker-compose.yml` pins an exact n8n version. Importing the workflows is a one-time step after the owner account exists, because the import needs an owner, leaves workflows unpublished, and would overwrite later edits if repeated on every start. All three workflows must be published, including the error workflow, or its trigger never fires. All have fixed ids so the error-workflow setting survives the import. Convex cloud cannot reach `localhost`, so a real end-to-end run needs a public URL for n8n; expose only the `/webhook/` paths so the editor stays private.
 
