@@ -52,6 +52,8 @@ const FORBIDDEN = { data: { code: "FORBIDDEN" } };
 const NOT_FOUND = { data: { code: "NOT_FOUND" } };
 const NOT_PENDING = { data: { code: "NOT_PENDING" } };
 const INVALID_INPUT = { data: { code: "INVALID_INPUT" } };
+const OWN_TOOL = { data: { code: "OWN_TOOL" } };
+const scheduled = (t: T["t"]) => t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
 
 describe("requests.create", () => {
   test("fails without an identity or a profile, even with invalid dates", async () => {
@@ -88,6 +90,27 @@ describe("requests.create", () => {
     await t.run((ctx) => ctx.db.delete(drill));
     await expect(request(t, 2, drill)).rejects.toMatchObject(NOT_FOUND);
     await expect(request(t, 2, drill, "bad", "bad")).rejects.toMatchObject(NOT_FOUND);
+  });
+
+  test("requesting your own tool is OWN_TOOL, with nothing stored or scheduled", async () => {
+    const { t, drill } = await setup();
+    await expect(request(t, 1, drill)).rejects.toMatchObject(OWN_TOOL);
+    expect(await all(t)).toHaveLength(0);
+    expect(await scheduled(t)).toHaveLength(0);
+  });
+
+  test("an admin who owns the tool is refused too", async () => {
+    const { t, drill } = await setup();
+    await makeAdmin(t, 1);
+    await expect(request(t, 1, drill)).rejects.toMatchObject(OWN_TOOL);
+    expect(await all(t)).toHaveLength(0);
+  });
+
+  test("OWN_TOOL comes before the date check, after NOT_FOUND", async () => {
+    const { t, drill } = await setup();
+    await expect(request(t, 1, drill, "bad", "bad")).rejects.toMatchObject(OWN_TOOL);
+    await t.run((ctx) => ctx.db.delete(drill));
+    await expect(request(t, 1, drill)).rejects.toMatchObject(NOT_FOUND);
   });
 
   test("an admin may borrow", async () => {

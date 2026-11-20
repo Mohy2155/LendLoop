@@ -176,11 +176,11 @@ export function AllTools() {
         <Empty text={emptyText} />
       ) : (
         <>
-          <ul className="mt-6 space-y-3">
+          <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((tool) => (
-              <li key={tool._id} className="rounded-md border border-border bg-surface p-4">
+              <li key={tool._id} className="flex min-w-0 flex-col rounded-md border border-border bg-surface p-4">
                 <h2 className="text-lg font-semibold break-words">{tool.name}</h2>
-                <p className="mt-1 flex flex-wrap gap-2 text-sm text-muted">
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
                   <span className={pill}>
                     <span className="sr-only">Category: </span>
                     {tool.category}
@@ -189,11 +189,16 @@ export function AllTools() {
                     <span className="sr-only">Condition: </span>
                     {tool.condition}
                   </span>
-                  <span className={pill}>{tool.onLoan ? "On loan today" : "Available"}</span>
+                </p>
+                <p className="mt-2 flex items-center gap-2 text-sm font-medium">
+                  <span aria-hidden="true" className={`size-2.5 rounded-full ${tool.onLoan ? "bg-warning-fg" : "bg-primary"}`} />
+                  {tool.onLoan ? "On loan today" : "Available"}
                 </p>
                 <p className="mt-2 break-words">{tool.description}</p>
-                <RequestForm toolId={tool._id} toolName={tool.name} />
-                <AdminRemove toolId={tool._id} toolName={tool.name} />
+                <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                  <RequestForm toolId={tool._id} toolName={tool.name} />
+                  <AdminRemove toolId={tool._id} toolName={tool.name} />
+                </div>
               </li>
             ))}
           </ul>

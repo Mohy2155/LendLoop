@@ -14,14 +14,15 @@ import {
   NAME_MAX,
   VISIBLE_TEXT,
 } from "../../convex/lib/toolOptions";
-import { primaryButton, quietButton } from "./button-styles";
+import { dangerButton, primaryButton, quietButton } from "./button-styles";
 
 type Tool = FunctionReturnType<typeof api.tools.listMine>[number];
 type ToolInput = Omit<Tool, "_id">;
 type FormValues = { name: string; category: string; condition: string; description: string };
 
 const EMPTY: FormValues = { name: "", category: "", condition: "", description: "" };
-const fieldClass = "mt-1 block min-h-10 w-full rounded-md border border-border bg-surface px-3 py-2";
+const fieldClass = "mt-1 block min-h-10 w-full rounded-md border bg-surface px-3 py-2";
+type Field = "name" | "category" | "condition" | "description";
 
 /** Plain wording for a failed call. Anything without a known code (validator, network) gets the fallback. */
 function messageFor(error: unknown, action = "save this") {
@@ -58,13 +59,19 @@ function ToolForm({
 }) {
   const uid = useId();
   const [values, setValues] = useState(initial);
-  const [error, setError] = useState<{ text: string } | null>(null);
+  // `field` is the one input to outline; a server error that names no field outlines none.
+  const [error, setError] = useState<{ text: string; field?: Field } | null>(null);
   const [pending, setPending] = useState(false);
   const busy = useRef(false); // blocks a second submit in the same tick, before state updates
   const nameRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const errorId = `${uid}-error`;
-  const describedBy = error ? errorId : undefined;
+  // Each input points at its helper line (if any) and, when it is the one in error, at the message.
+  const props = (field: Field, helper?: string) => ({
+    "aria-invalid": error?.field === field || undefined,
+    "aria-describedby": [helper && `${uid}-${field}-hint`, error?.field === field && errorId].filter(Boolean).join(" ") || undefined,
+    className: `${fieldClass} ${error?.field === field ? "border-danger" : "border-border"}`,
+  });
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -84,11 +91,11 @@ function ToolForm({
     const description = values.description.trim();
     const category = CATEGORIES.find((c) => c === values.category);
     const condition = CONDITIONS.find((c) => c === values.condition);
-    if (!VISIBLE_TEXT.test(name) || name.length > NAME_MAX) return setError({ text: `Enter a name of up to ${NAME_MAX} characters.` });
-    if (!category) return setError({ text: "Choose a category." });
-    if (!condition) return setError({ text: "Choose a condition." });
+    if (!VISIBLE_TEXT.test(name) || name.length > NAME_MAX) return setError({ text: `Enter a name of up to ${NAME_MAX} characters.`, field: "name" });
+    if (!category) return setError({ text: "Choose a category.", field: "category" });
+    if (!condition) return setError({ text: "Choose a condition.", field: "condition" });
     if (!VISIBLE_TEXT.test(description) || description.length > DESCRIPTION_MAX) {
-      return setError({ text: `Enter a description of up to ${DESCRIPTION_MAX} characters.` });
+      return setError({ text: `Enter a description of up to ${DESCRIPTION_MAX} characters.`, field: "description" });
     }
     busy.current = true;
     setPending(true);
@@ -117,26 +124,27 @@ function ToolForm({
           Name
           <input
             ref={nameRef}
-            className={fieldClass}
+            {...props("name", "hint")}
             value={values.name}
             onChange={set("name")}
             maxLength={NAME_MAX}
             readOnly={pending}
             required
-            aria-invalid={!!error}
-            aria-describedby={describedBy}
+            placeholder="e.g. Cordless drill"
           />
+          <span id={`${uid}-name-hint`} className="mt-1 block text-sm text-muted">
+            Up to {NAME_MAX} characters.
+          </span>
         </label>
         <label className="block">
           Category
           {/* Selects cannot be read-only, so they are disabled while saving; focus stays on the submit button. */}
           <select
-            className={fieldClass}
+            {...props("category")}
             value={values.category}
             onChange={set("category")}
             disabled={pending}
             required
-            aria-describedby={describedBy}
           >
             <option value="">Choose a category</option>
             {CATEGORIES.map((category) => (
@@ -147,12 +155,11 @@ function ToolForm({
         <label className="block">
           Condition
           <select
-            className={fieldClass}
+            {...props("condition")}
             value={values.condition}
             onChange={set("condition")}
             disabled={pending}
             required
-            aria-describedby={describedBy}
           >
             <option value="">Choose a condition</option>
             {CONDITIONS.map((condition) => (
@@ -163,19 +170,22 @@ function ToolForm({
         <label className="block sm:col-span-2">
           Description
           <textarea
-            className={fieldClass}
+            {...props("description", "hint")}
             rows={3}
             value={values.description}
             onChange={set("description")}
             maxLength={DESCRIPTION_MAX}
             readOnly={pending}
             required
-            aria-describedby={describedBy}
+            placeholder="What it is and how to look after it"
           />
+          <span id={`${uid}-description-hint`} className="mt-1 block text-sm text-muted">
+            Up to {DESCRIPTION_MAX} characters.
+          </span>
         </label>
       </div>
       {error && (
-        <p ref={errorRef} id={errorId} role="alert" tabIndex={-1} className="mt-3 font-semibold">
+        <p ref={errorRef} id={errorId} role="alert" tabIndex={-1} className="mt-3 font-semibold text-danger">
           {error.text}
         </p>
       )}
@@ -344,58 +354,54 @@ export function MyListings() {
                 />
               ) : (
                 <div className="rounded-md border border-border bg-surface p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold break-words">{tool.name}</h2>
-                      <p className="mt-1 flex flex-wrap gap-2 text-sm text-muted">
-                        <span className="rounded-full border border-border px-2">
-                          <span className="sr-only">Category: </span>
-                          {tool.category}
-                        </span>
-                        <span className="rounded-full border border-border px-2">
-                          <span className="sr-only">Condition: </span>
-                          {tool.condition}
-                        </span>
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className={quietButton}
-                        ref={(element) => {
-                          if (element) editButtons.current.set(tool._id, element);
-                          else editButtons.current.delete(tool._id);
-                        }}
-                        onClick={() => {
-                          setEditing({ tool, index: rows.findIndex((row) => row._id === tool._id) });
-                          setAdding(false);
-                          setConfirmId(null);
-                        }}
-                      >
-                        Edit<span className="sr-only"> {tool.name}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={quietButton}
-                        ref={(element) => {
-                          if (element) deleteButtons.current.set(tool._id, element);
-                          else deleteButtons.current.delete(tool._id);
-                        }}
-                        onClick={() => {
-                          setDeleteError(null);
-                          setConfirmId(tool._id);
-                        }}
-                      >
-                        Delete<span className="sr-only"> {tool.name}</span>
-                      </button>
-                    </div>
-                  </div>
+                  <h2 className="text-lg font-semibold break-words">{tool.name}</h2>
+                  <p className="mt-1 flex flex-wrap gap-2 text-sm text-muted">
+                    <span className="rounded-full border border-border px-2">
+                      <span className="sr-only">Category: </span>
+                      {tool.category}
+                    </span>
+                    <span className="rounded-full border border-border px-2">
+                      <span className="sr-only">Condition: </span>
+                      {tool.condition}
+                    </span>
+                  </p>
                   <p className="mt-3 break-words whitespace-pre-line">{tool.description}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={quietButton}
+                      ref={(element) => {
+                        if (element) editButtons.current.set(tool._id, element);
+                        else editButtons.current.delete(tool._id);
+                      }}
+                      onClick={() => {
+                        setEditing({ tool, index: rows.findIndex((row) => row._id === tool._id) });
+                        setAdding(false);
+                        setConfirmId(null);
+                      }}
+                    >
+                      Edit<span className="sr-only"> {tool.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={quietButton}
+                      ref={(element) => {
+                        if (element) deleteButtons.current.set(tool._id, element);
+                        else deleteButtons.current.delete(tool._id);
+                      }}
+                      onClick={() => {
+                        setDeleteError(null);
+                        setConfirmId(tool._id);
+                      }}
+                    >
+                      Delete<span className="sr-only"> {tool.name}</span>
+                    </button>
+                  </div>
                   {confirming === tool._id && (
                     <div className="mt-3 border-t border-border pt-3">
-                      <p className="font-semibold">Delete {tool.name}? This cannot be undone.</p>
+                      <p className="break-words font-semibold">Delete {tool.name}? This cannot be undone.</p>
                       {deleteError && (
-                        <p role="alert" className="mt-1">
+                        <p role="alert" className="mt-1 text-danger">
                           {deleteError}
                         </p>
                       )}
@@ -411,7 +417,7 @@ export function MyListings() {
                         >
                           Cancel
                         </button>
-                        <button type="button" className={primaryButton} onClick={() => confirmDelete(tool)}>
+                        <button type="button" className={dangerButton} onClick={() => confirmDelete(tool)}>
                           Yes, delete<span className="sr-only"> {tool.name}</span>
                         </button>
                       </div>

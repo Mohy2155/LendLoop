@@ -12,6 +12,17 @@
   --accent: #f2c230;
   --ring: #1f5a45;
   --peg: #c5d0c8;
+  --placeholder: #4a5a52;
+  --success-soft: #dcefe3;
+  --success-fg: #123f2d;
+  --warning-soft: #fbe9b5;
+  --warning-fg: #5a3d00;
+  --danger: #992218;
+  --danger-foreground: #ffffff;
+  --danger-soft: #f9dcd8;
+  --danger-soft-fg: #7a1a14;
+  --neutral-soft: #e6ebe7;
+  --neutral-fg: #2f3d36;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,13 +30,24 @@
     --background: #0e1713;
     --surface: #15221c;
     --foreground: #e8efea;
-    --muted: #9db0a5;
+    --muted: #b4c4ba;
     --border: #284036;
     --primary: #6fcfa8;
     --primary-foreground: #0e1713;
     --accent: #f2c230;
     --ring: #6fcfa8;
     --peg: #243a30;
+    --placeholder: #b4c4ba;
+    --success-soft: #1d3a2d;
+    --success-fg: #bfeed6;
+    --warning-soft: #3d3210;
+    --warning-fg: #f6d77a;
+    --danger: #ff9a8d;
+    --danger-foreground: #2a0b08;
+    --danger-soft: #4a1f1b;
+    --danger-soft-fg: #ffc8c0;
+    --neutral-soft: #243229;
+    --neutral-fg: #cfdcd3;
   }
 }
 
@@ -39,6 +61,16 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-ring: var(--ring);
+  --color-success-soft: var(--success-soft);
+  --color-success-fg: var(--success-fg);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-fg: var(--warning-fg);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-fg: var(--danger-soft-fg);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-neutral-fg: var(--neutral-fg);
   --font-sans: var(--font-geist), system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-geist), system-ui, sans-serif;
 }
@@ -61,6 +93,11 @@
     font-family: var(--font-display);
     line-height: 1.15;
     letter-spacing: -0.02em;
+  }
+
+  ::placeholder {
+    color: var(--placeholder);
+    opacity: 1;
   }
 
   :focus-visible {
@@ -89,6 +126,22 @@
 .pegboard {
   background-image: radial-gradient(var(--peg) 1.5px, transparent 1.6px);
   background-size: 22px 22px;
+}
+
+/* Tab row that scrolls on narrow screens: the edges fade only while more tabs are hidden past them. */
+.tab-scroll {
+  position: relative;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background:
+    linear-gradient(to right, var(--background), var(--background)) left center / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--background), var(--background)) right center / 2rem 100% no-repeat local,
+    linear-gradient(to right, color-mix(in srgb, var(--foreground) 18%, transparent), transparent) left center / 1.25rem 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in srgb, var(--foreground) 18%, transparent), transparent) right center / 1.25rem 100% no-repeat scroll;
+}
+
+.tab-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

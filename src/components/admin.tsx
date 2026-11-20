@@ -5,12 +5,15 @@ import { useMutation, usePaginatedQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { PAGE_SIZE } from "../../convex/lib/paging";
+import { formatRange } from "../../convex/lib/requestDisplay";
 import { quietButton } from "./button-styles";
 import { ReminderLine, requestMessage } from "./requests";
+import { StatusBadge } from "./status-badge";
 import { Empty, Loading, LoadMore, pill } from "./tool-board";
 
 function Loans() {
   const { results, status, loadMore } = usePaginatedQuery(api.admin.listLoans, {}, { initialNumItems: PAGE_SIZE });
+  const [now] = useState(() => Date.now()); // read once per mount, so render stays pure
   // A filtered page can be empty while later pages hold loans, so "empty" means every page was read.
   if (status === "LoadingFirstPage") return <Loading />;
   if (results.length === 0 && status === "Exhausted") return <Empty text="There are no loans yet." />;
@@ -19,15 +22,19 @@ function Loans() {
       <ul className="mt-4 space-y-3">
         {results.map((loan) => (
           <li key={loan._id} className="rounded-md border border-border bg-surface p-4">
-            <h3 className="text-lg font-semibold break-words">{loan.toolName}</h3>
-            <p className="mt-1 flex flex-wrap gap-2 text-sm text-muted">
-              <span>
-                {loan.ownerName} to {loan.borrowerName}: {loan.startDate === loan.endDate ? loan.startDate : `${loan.startDate} to ${loan.endDate}`}
-              </span>
-              <span className={pill}>
-                <span className="sr-only">Status: </span>
-                {loan.status}
-              </span>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h3 className="min-w-0 text-lg font-semibold break-words">{loan.toolName}</h3>
+              <StatusBadge status={loan.status} endDate={loan.endDate} now={now} />
+            </div>
+            <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-muted">Lender</dt>
+              <dd className="break-words">{loan.ownerName}</dd>
+              <dt className="text-muted">Borrower</dt>
+              <dd className="break-words">{loan.borrowerName}</dd>
+              <dt className="text-muted">Dates</dt>
+              <dd>{formatRange(loan.startDate, loan.endDate, now)}</dd>
+            </dl>
+            <p className="mt-2 text-sm text-muted empty:hidden">
               <ReminderLine at={loan.lastReminderAt} />
             </p>
           </li>
@@ -62,7 +69,7 @@ function Users() {
   return (
     <>
       {message && (
-        <p role="alert" className="mt-4 font-medium">
+        <p role="alert" className="mt-4 font-medium text-danger">
           {message}
         </p>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useConvexAuth, useQueries, type RequestForQueries } from "convex/react";
@@ -15,9 +15,18 @@ export function AppNav() {
   const requests = useMemo((): RequestForQueries => (isAuthenticated ? { viewer: { query: api.users.viewer, args: {} } } : {}), [isAuthenticated]);
   const viewer = useQueries(requests).viewer;
   const isAdmin = !(viewer instanceof Error) && (viewer as { role?: string } | null | undefined)?.role === "admin";
+  const row = useRef<HTMLUListElement>(null);
+
+  // Bring the current tab into view by moving the row only, never the page.
+  useEffect(() => {
+    const list = row.current;
+    const tab = list?.querySelector<HTMLElement>("[data-current]");
+    if (list && tab) list.scrollLeft = tab.offsetLeft - (list.clientWidth - tab.offsetWidth) / 2;
+  }, [pathname, isAdmin]);
+
   return (
     <nav aria-label="Main" className="border-b border-border">
-      <ul className="mx-auto flex w-full max-w-5xl gap-1 overflow-x-auto px-4 sm:px-6">
+      <ul ref={row} className="tab-scroll mx-auto flex w-full max-w-5xl gap-1 px-4 sm:px-6">
         {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
           const exact = pathname === item.href;
           const child = !exact && pathname.startsWith(`${item.href}/`);
@@ -26,6 +35,7 @@ export function AppNav() {
               <Link
                 href={item.href}
                 aria-current={exact ? "page" : undefined}
+                data-current={exact || child ? "" : undefined}
                 className={`inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-3 text-sm font-medium focus-visible:outline-offset-[-2px] ${
                   exact || child
                     ? "border-primary text-foreground"
