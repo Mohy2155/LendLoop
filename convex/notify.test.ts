@@ -38,10 +38,15 @@ const calls = async (t: T) =>
 const create = (t: T, drill: Id<"tools">) =>
   as(t, 2).mutation(api.requests.create, { toolId: drill, startDate: "2026-06-10", endDate: "2026-06-12" });
 const firstRequest = async (t: T) => (await t.run((ctx) => ctx.db.query("requests").first()))!._id;
+const code = (c: string) => ({ data: { code: c } });
 
 describe("webhook calls are scheduled by the request mutations", () => {
   // Fake timers keep the scheduled sends from running, so the jobs can be read as they were queued.
-  beforeEach(() => vi.useFakeTimers());
+  // The clock is pinned so the fixture dates are not in the past (the date rule refuses a start before today).
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T12:00:00Z"));
+  });
   afterEach(() => vi.useRealTimers());
 
   test("create schedules one pending call with only the new-request fields", async () => {
@@ -77,20 +82,74 @@ describe("webhook calls are scheduled by the request mutations", () => {
     }
   });
 
+  test("confirming pickup schedules a pickedUp call that tells the owner (with the owner's name)", async () => {
+    const { t, drill } = await setup();
+    await create(t, drill);
+    const id = await firstRequest(t);
+    await as(t, 1).mutation(api.requests.decide, { id, decision: "approve" });
+    await as(t, 2).mutation(api.requests.confirmPickup, { id });
+    const jobs = await calls(t);
+    expect(jobs).toHaveLength(3);
+    expect(jobs[2].args[0].payload).toEqual({
+      status: "pickedUp",
+      toolName: "Drill",
+      startDate: "2026-06-10",
+      endDate: "2026-06-12",
+      borrowerName: "User 2",
+      ownerName: "User 1",
+    });
+  });
+
   test("mark returned schedules a returned call without the owner's name", async () => {
     const { t, drill } = await setup();
     await create(t, drill);
     const id = await firstRequest(t);
     await as(t, 1).mutation(api.requests.decide, { id, decision: "approve" });
+    await as(t, 2).mutation(api.requests.confirmPickup, { id });
     await as(t, 1).mutation(api.requests.markReturned, { id });
     const jobs = await calls(t);
-    expect(jobs).toHaveLength(3);
-    expect(jobs[2].args[0].payload).toEqual({
+    expect(jobs).toHaveLength(4);
+    expect(jobs[3].args[0].payload).toEqual({
       status: "returned",
       toolName: "Drill",
       startDate: "2026-06-10",
       endDate: "2026-06-12",
       borrowerName: "User 2",
+    });
+  });
+
+  test("a cancel by the borrower tells the owner: cancelledBy borrower, with the owner's name", async () => {
+    const { t, drill } = await setup();
+    await create(t, drill);
+    await as(t, 2).mutation(api.requests.cancel, { id: await firstRequest(t) });
+    const jobs = await calls(t);
+    expect(jobs).toHaveLength(2);
+    expect(jobs[1].args[0].payload).toEqual({
+      status: "cancelled",
+      toolName: "Drill",
+      startDate: "2026-06-10",
+      endDate: "2026-06-12",
+      borrowerName: "User 2",
+      ownerName: "User 1",
+      cancelledBy: "borrower",
+    });
+  });
+
+  test("a cancel by the owner tells the borrower: cancelledBy owner, without the owner's name", async () => {
+    const { t, drill } = await setup();
+    await create(t, drill);
+    const id = await firstRequest(t);
+    await as(t, 1).mutation(api.requests.decide, { id, decision: "approve" });
+    await as(t, 1).mutation(api.requests.cancel, { id });
+    const jobs = await calls(t);
+    expect(jobs).toHaveLength(3);
+    expect(jobs[2].args[0].payload).toEqual({
+      status: "cancelled",
+      toolName: "Drill",
+      startDate: "2026-06-10",
+      endDate: "2026-06-12",
+      borrowerName: "User 2",
+      cancelledBy: "owner",
     });
   });
 
@@ -114,24 +173,36 @@ describe("webhook calls are scheduled by the request mutations", () => {
     await expect(as(t, 2).mutation(api.requests.create, { toolId: drill, startDate: "2026-06-12", endDate: "2026-06-10" })).rejects.toThrow();
     expect(await calls(t)).toHaveLength(0);
 
+    await expect(as(t, 2).mutation(api.requests.create, { toolId: drill, startDate: "2026-05-30", endDate: "2026-06-10" })).rejects.toMatchObject(code("START_IN_PAST"));
     await create(t, drill);
+    await expect(create(t, drill)).rejects.toMatchObject(code("ALREADY_REQUESTED"));
     const id = await firstRequest(t);
-    await expect(as(t, 2).mutation(api.requests.decide, { id, decision: "approve" })).rejects.toThrow(); // not the owner
-    await expect(as(t, 2).mutation(api.requests.markReturned, { id })).rejects.toThrow();
-    await expect(as(t, 1).mutation(api.requests.markReturned, { id })).rejects.toThrow(); // not approved
+    await expect(as(t, 2).mutation(api.requests.decide, { id, decision: "approve" })).rejects.toMatchObject(code("FORBIDDEN")); // not the owner
+    await expect(as(t, 2).mutation(api.requests.markReturned, { id })).rejects.toMatchObject(code("FORBIDDEN"));
+    await expect(as(t, 1).mutation(api.requests.markReturned, { id })).rejects.toMatchObject(code("NOT_PICKED_UP"));
+    await expect(as(t, 2).mutation(api.requests.confirmPickup, { id })).rejects.toMatchObject(code("NOT_APPROVED")); // still pending
+    await expect(as(t, 1).mutation(api.requests.cancel, { id })).rejects.toMatchObject(code("FORBIDDEN")); // owner on a pending request
+    await expect(as(t, 3).mutation(api.requests.cancel, { id })).rejects.toMatchObject(code("FORBIDDEN"));
     expect(await calls(t)).toHaveLength(1);
 
     await as(t, 1).mutation(api.requests.decide, { id, decision: "approve" });
-    await expect(as(t, 1).mutation(api.requests.decide, { id, decision: "decline" })).rejects.toThrow(); // not pending
+    await expect(as(t, 1).mutation(api.requests.decide, { id, decision: "decline" })).rejects.toMatchObject(code("NOT_PENDING"));
+    await expect(as(t, 1).mutation(api.requests.confirmPickup, { id })).rejects.toMatchObject(code("FORBIDDEN")); // the owner
     expect(await calls(t)).toHaveLength(2);
+
+    await as(t, 2).mutation(api.requests.confirmPickup, { id });
+    await expect(as(t, 1).mutation(api.requests.cancel, { id })).rejects.toMatchObject(code("NOT_CANCELLABLE"));
+    await expect(as(t, 2).mutation(api.requests.confirmPickup, { id })).rejects.toMatchObject(code("NOT_APPROVED"));
+    await expect(as(t, 1).mutation(api.requests.decide, { id, decision: "approve" })).rejects.toMatchObject(code("NOT_PENDING"));
+    expect(await calls(t)).toHaveLength(3);
   });
 
-  test("a loan that has not started cannot be returned and schedules nothing", async () => {
+  test("a loan that was not picked up cannot be returned and schedules nothing", async () => {
     const { t, drill } = await setup();
     await as(t, 2).mutation(api.requests.create, { toolId: drill, startDate: "2999-01-01", endDate: "2999-01-02" });
     const id = await firstRequest(t);
     await as(t, 1).mutation(api.requests.decide, { id, decision: "approve" });
-    await expect(as(t, 1).mutation(api.requests.markReturned, { id })).rejects.toThrow();
+    await expect(as(t, 1).mutation(api.requests.markReturned, { id })).rejects.toMatchObject(code("NOT_PICKED_UP"));
     expect(await calls(t)).toHaveLength(2);
   });
 });

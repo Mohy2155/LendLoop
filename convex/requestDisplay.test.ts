@@ -5,13 +5,15 @@ const NBSP = "\u00a0";
 const now = Date.UTC(2026, 10, 20, 15); // 2026-11-20
 
 describe("isOverdue", () => {
-  test("only an approved loan that ended before today is overdue", () => {
-    expect(isOverdue("approved", "2026-11-19", now)).toBe(true);
-    expect(isOverdue("approved", "2026-11-20", now)).toBe(false);
-    expect(isOverdue("approved", "2026-12-01", now)).toBe(false);
+  test("an approved or picked-up loan that ended before today is overdue", () => {
+    for (const status of ["approved", "pickedUp"]) {
+      expect(isOverdue(status, "2026-11-19", now)).toBe(true);
+      expect(isOverdue(status, "2026-11-20", now)).toBe(false);
+      expect(isOverdue(status, "2026-12-01", now)).toBe(false);
+    }
   });
   test("other statuses are never overdue", () => {
-    for (const status of ["pending", "declined", "returned"]) expect(isOverdue(status, "2026-01-01", now)).toBe(false);
+    for (const status of ["pending", "declined", "cancelled", "returned"]) expect(isOverdue(status, "2026-01-01", now)).toBe(false);
   });
   test("uses the UTC day", () => {
     expect(isOverdue("approved", "2026-11-19", Date.UTC(2026, 10, 20, 0, 0, 1))).toBe(true);

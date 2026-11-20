@@ -1,6 +1,6 @@
-/** An approved loan whose end date is before today (UTC): the same rule the daily reminders use. */
+/** An approved or picked-up loan whose end date is before today (UTC): the same rule the daily reminders use. */
 export function isOverdue(status: string, endDate: string, now: number) {
-  return status === "approved" && endDate < new Date(now).toISOString().slice(0, 10);
+  return (status === "approved" || status === "pickedUp") && endDate < new Date(now).toISOString().slice(0, 10);
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

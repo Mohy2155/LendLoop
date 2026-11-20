@@ -19,7 +19,7 @@ export default defineSchema({
     photos: v.optional(v.array(v.id("_storage"))), // owner's photos, first one is the cover; absent means none
   }).index("by_owner", ["ownerId"]).index("by_category", ["category"]),
 
-  // An approved request is the loan. `toolName` is a copy so a request still reads if its tool is deleted.
+  // Approved means reserved, picked up means on loan. `toolName` is a copy so a request still reads if its tool is deleted.
   requests: defineTable({
     toolId: v.id("tools"),
     toolName: v.string(),
@@ -27,11 +27,19 @@ export default defineSchema({
     borrowerId: v.id("users"),
     startDate: v.string(), // YYYY-MM-DD
     endDate: v.string(),
-    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("declined"), v.literal("returned")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("pickedUp"),
+      v.literal("returned"),
+      v.literal("declined"),
+      v.literal("cancelled"),
+    ),
   })
     .index("by_borrower", ["borrowerId"])
     .index("by_owner", ["ownerId"])
     .index("by_tool_status", ["toolId", "status"])
+    .index("by_tool_borrower_status", ["toolId", "borrowerId", "status"])
     .index("by_status_endDate", ["status", "endDate"]),
 
   // One row per loan per day: the write-back from the daily reminder workflow. `day` is the UTC date the run fetched.

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePaginatedQuery, type PaginationStatus } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { catchError, type ErrorInfo } from "next/error";
 import Image from "next/image";
 import { api } from "../../convex/_generated/api";
@@ -146,6 +147,76 @@ export function PublicToolList() {
   );
 }
 
+type ListedTool = FunctionReturnType<typeof api.tools.listAll>["page"][number];
+
+const STATE_LINE = {
+  available: { dot: "bg-primary", text: "Available" },
+  reserved: { dot: "bg-muted", text: "Reserved" },
+  onLoan: { dot: "bg-warning-fg", text: "On loan. Check back after it's returned." },
+} as const;
+
+/**
+ * One tool for a signed-in user. A sent request makes Convex report `requested`, which swaps the form for
+ * "You've already requested this tool", so the form unmounts and cannot move focus itself. The card stays
+ * mounted: the form tells it a request is going out (`sending`, set before the call so the order of Convex's
+ * replies does not matter), and the card focuses that text once it appears. Never on first load.
+ */
+function ToolCard({ tool }: { tool: ListedTool }) {
+  const sending = useRef(false);
+  const requestedNote = useRef<HTMLParagraphElement>(null);
+  const state = STATE_LINE[tool.availability];
+  const showRequested = tool.requested && tool.availability !== "onLoan";
+
+  useEffect(() => {
+    if (showRequested && sending.current) {
+      sending.current = false;
+      requestedNote.current?.focus();
+    }
+  }, [showRequested]);
+
+  return (
+    <li className="flex min-w-0 flex-col rounded-md border border-border bg-surface p-4">
+      {tool.photoUrl && (
+        <Image
+          src={tool.photoUrl}
+          alt={`Photo of ${tool.name}`}
+          width={320}
+          height={240}
+          unoptimized
+          className="mb-3 aspect-[4/3] w-full rounded-md border border-border object-cover"
+        />
+      )}
+      <h2 className="text-lg font-semibold break-words">{tool.name}</h2>
+      <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+        <span className={pill}>
+          <span className="sr-only">Category: </span>
+          {tool.category}
+        </span>
+        <span className={pill}>
+          <span className="sr-only">Condition: </span>
+          {tool.condition}
+        </span>
+      </p>
+      <p className="mt-2 flex items-center gap-2 text-sm font-medium">
+        <span aria-hidden="true" className={`size-2.5 shrink-0 rounded-full ${state.dot}`} />
+        {state.text}
+      </p>
+      <p className="mt-2 break-words">{tool.description}</p>
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+        {tool.availability !== "onLoan" &&
+          (showRequested ? (
+            <p ref={requestedNote} tabIndex={-1} className="text-sm font-medium">
+              You&apos;ve already requested this tool
+            </p>
+          ) : (
+            <RequestForm toolId={tool._id} toolName={tool.name} onSending={(value) => (sending.current = value)} />
+          ))}
+        <AdminRemove toolId={tool._id} toolName={tool.name} />
+      </div>
+    </li>
+  );
+}
+
 /** Every tool for signed-in users, filterable by category. Errors reach the signed-in error page. */
 export function AllTools() {
   const [category, setCategory] = useState<Category | "">("");
@@ -179,38 +250,7 @@ export function AllTools() {
         <>
           <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((tool) => (
-              <li key={tool._id} className="flex min-w-0 flex-col rounded-md border border-border bg-surface p-4">
-                {tool.photoUrl && (
-                  <Image
-                    src={tool.photoUrl}
-                    alt={`Photo of ${tool.name}`}
-                    width={320}
-                    height={240}
-                    unoptimized
-                    className="mb-3 aspect-[4/3] w-full rounded-md border border-border object-cover"
-                  />
-                )}
-                <h2 className="text-lg font-semibold break-words">{tool.name}</h2>
-                <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
-                  <span className={pill}>
-                    <span className="sr-only">Category: </span>
-                    {tool.category}
-                  </span>
-                  <span className={pill}>
-                    <span className="sr-only">Condition: </span>
-                    {tool.condition}
-                  </span>
-                </p>
-                <p className="mt-2 flex items-center gap-2 text-sm font-medium">
-                  <span aria-hidden="true" className={`size-2.5 rounded-full ${tool.onLoan ? "bg-warning-fg" : "bg-primary"}`} />
-                  {tool.onLoan ? "On loan today" : "Available"}
-                </p>
-                <p className="mt-2 break-words">{tool.description}</p>
-                <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                  <RequestForm toolId={tool._id} toolName={tool.name} />
-                  <AdminRemove toolId={tool._id} toolName={tool.name} />
-                </div>
-              </li>
+              <ToolCard key={tool._id} tool={tool} />
             ))}
           </ul>
           <LoadMore status={status} loadMore={() => loadMore(PAGE_SIZE)} />

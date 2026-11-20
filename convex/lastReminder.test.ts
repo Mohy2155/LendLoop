@@ -45,7 +45,7 @@ describe("lastReminderAt on the loan lists", () => {
     const incoming = (await as(1).query(api.requests.listIncoming, opts)).page[0];
     const admin = (await as(3).query(api.admin.listLoans, opts)).page[0];
     expect(Object.keys(mine).sort()).toEqual([...BASE, "lastReminderAt"].sort());
-    expect(Object.keys(incoming).sort()).toEqual([...BASE, "borrowerName", "lastReminderAt"].sort());
+    expect(Object.keys(incoming).sort()).toEqual([...BASE, "blocked", "borrowerName", "lastReminderAt"].sort());
     expect(Object.keys(admin).sort()).toEqual([...BASE, "borrowerName", "lastReminderAt", "ownerName"].sort());
     for (const item of [mine, incoming, admin]) expect(item.lastReminderAt).toBe(1000);
     // The borrower still never sees the owner.

@@ -1,7 +1,7 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { mutation, query, type DatabaseReader, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireAdmin, requireUser } from "./lib/access";
 import { safePaging } from "./lib/paging";
 import {
@@ -187,33 +187,42 @@ export const removeAny = mutation({
   },
 });
 
-/**
- * True when an approved request for the tool includes `today` (YYYY-MM-DD, UTC).
- * Note: reads all of the tool's approved requests; fine until a tool has thousands.
- */
-async function onLoanToday(ctx: QueryCtx, toolId: Id<"tools">, today: string) {
-  const approved = await ctx.db
-    .query("requests")
-    .withIndex("by_tool_status", (q) => q.eq("toolId", toolId).eq("status", "approved"))
-    .collect();
-  return approved.some((r) => r.startDate <= today && today <= r.endDate);
+/** A tool's state, read from its requests: on loan (a picked-up request) or reserved (an approved one). Not a Convex function. */
+export async function toolState(ctx: { db: DatabaseReader }, toolId: Id<"tools">) {
+  const first = (status: "pickedUp" | "approved") =>
+    ctx.db
+      .query("requests")
+      .withIndex("by_tool_status", (q) => q.eq("toolId", toolId).eq("status", status))
+      .first();
+  const [loan, reserved] = await Promise.all([first("pickedUp"), first("approved")]);
+  return { onLoan: loan !== null, reserved: reserved !== null };
+}
+
+/** True when the borrower has a pending or approved request on the tool. Not a Convex function. */
+export async function hasOpenRequest(ctx: { db: DatabaseReader }, toolId: Id<"tools">, borrowerId: Id<"users">) {
+  const first = (status: "pending" | "approved") =>
+    ctx.db
+      .query("requests")
+      .withIndex("by_tool_borrower_status", (q) => q.eq("toolId", toolId).eq("borrowerId", borrowerId).eq("status", status))
+      .first();
+  const [pending, approved] = await Promise.all([first("pending"), first("approved")]);
+  return pending !== null || approved !== null;
 }
 
 // Reads of the whole board. Each builds its items field by field, never from the row itself,
 // so a field added to `tools` later is not exposed by accident.
 
-/** Open to anyone, including signed-out visitors: name and category only, tools not on loan today. */
+/** Open to anyone, including signed-out visitors: name and category only, tools that are not on loan. */
 export const listPublic = query({
   args: { paginationOpts: paginationOptsValidator },
   returns: paginationResultValidator(v.object({ name: v.string(), category: categoryValidator })),
   handler: async (ctx, { paginationOpts }) => {
     const result = await ctx.db.query("tools").order("desc").paginate(safePaging(paginationOpts));
-    const today = new Date().toISOString().slice(0, 10);
     // A page can come back shorter than requested (or empty) when some of its tools are on loan.
-    const loans = await Promise.all(result.page.map((tool) => onLoanToday(ctx, tool._id, today)));
+    const states = await Promise.all(result.page.map((tool) => toolState(ctx, tool._id)));
     return {
       ...result,
-      page: result.page.filter((_, i) => !loans[i]).map(({ name, category }) => ({ name, category })),
+      page: result.page.filter((_, i) => !states[i].onLoan).map(({ name, category }) => ({ name, category })),
     };
   },
 });
@@ -221,23 +230,25 @@ export const listPublic = query({
 export const listAll = query({
   args: { paginationOpts: paginationOptsValidator, category: v.optional(categoryValidator) },
   handler: async (ctx, { paginationOpts, category }) => {
-    await requireUser(ctx);
+    const user = await requireUser(ctx);
     const tools = category
       ? ctx.db.query("tools").withIndex("by_category", (q) => q.eq("category", category))
       : ctx.db.query("tools");
     const result = await tools.order("desc").paginate(safePaging(paginationOpts));
-    // Note: uses the server's UTC date; not refreshed until the query re-runs.
-    const today = new Date().toISOString().slice(0, 10);
     const page = await Promise.all(
-      result.page.map(async ({ _id, name, category, condition, description, photos }) => ({
-        _id,
-        name,
-        category,
-        condition,
-        description,
-        onLoan: await onLoanToday(ctx, _id, today),
-        photoUrl: photos?.[0] ? await ctx.storage.getUrl(photos[0]) : null,
-      })),
+      result.page.map(async ({ _id, name, category, condition, description, photos }) => {
+        const state = await toolState(ctx, _id);
+        return {
+          _id,
+          name,
+          category,
+          condition,
+          description,
+          availability: state.onLoan ? ("onLoan" as const) : state.reserved ? ("reserved" as const) : ("available" as const),
+          requested: await hasOpenRequest(ctx, _id, user._id), // the caller's own request only
+          photoUrl: photos?.[0] ? await ctx.storage.getUrl(photos[0]) : null,
+        };
+      }),
     );
     return { ...result, page };
   },
