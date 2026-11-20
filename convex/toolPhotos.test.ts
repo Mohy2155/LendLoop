@@ -327,12 +327,13 @@ describe("photos in the lists", () => {
     expect(JSON.stringify(item)).not.toContain(b);
     expect(Object.keys(item).sort()).toEqual([
       "_id",
+      "availability",
       "category",
       "condition",
       "description",
       "name",
-      "onLoan",
       "photoUrl",
+      "requested",
     ]);
   });
 

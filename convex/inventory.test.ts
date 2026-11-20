@@ -21,6 +21,8 @@ const EXPECTED: Record<string, "identity" | "public" | "requireUser" | "requireA
   "requests:listMine": "requireUser",
   "requests:listIncoming": "requireUser",
   "requests:markReturned": "requireUser",
+  "requests:cancel": "requireUser",
+  "requests:confirmPickup": "requireUser",
   "tools:removeAny": "requireAdmin",
   "admin:listLoans": "requireAdmin",
   "admin:listUsers": "requireAdmin",

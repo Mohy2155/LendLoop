@@ -34,7 +34,7 @@ async function setup() {
 }
 const as = (t: T, n: number) => t.withIdentity(identity(n));
 const opts = { paginationOpts: { numItems: 10, cursor: null } };
-const seed = (t: T, toolId: Id<"tools">, ownerId: Id<"users">, borrowerId: Id<"users">, status: "pending" | "approved" | "declined" | "returned") =>
+const seed = (t: T, toolId: Id<"tools">, ownerId: Id<"users">, borrowerId: Id<"users">, status: "pending" | "approved" | "pickedUp" | "declined" | "returned" | "cancelled") =>
   t.run((ctx) =>
     ctx.db.insert("requests", { toolId, toolName: "Drill", ownerId, borrowerId, startDate: "2026-06-10", endDate: "2026-06-12", status }),
   );
@@ -83,14 +83,17 @@ describe("admin.listLoans", () => {
     await expect(as(t, 1).query(api.admin.listLoans, opts)).rejects.toMatchObject(FORBIDDEN);
   });
 
-  test("returns only approved and returned requests, newest first, with exact keys", async () => {
+  test("returns approved, picked-up and returned requests only, newest first, with exact keys", async () => {
     const { t, u, drill } = await setup();
     await seed(t, drill, u[1], u[2], "pending");
     await seed(t, drill, u[1], u[3], "declined");
     await seed(t, drill, u[1], u[2], "returned");
     await seed(t, drill, u[1], u[3], "approved");
+    await seed(t, drill, u[1], u[2], "cancelled");
+    await seed(t, drill, u[1], u[3], "pickedUp");
     const { page } = await as(t, 4).query(api.admin.listLoans, opts);
     expect(page.map((l) => [l.status, l.borrowerName])).toEqual([
+      ["pickedUp", "User 3"],
       ["approved", "User 3"],
       ["returned", "User 2"],
     ]);

@@ -7,7 +7,7 @@ import { safePaging } from "./lib/paging";
 
 // Every function here starts with requireAdmin. Items are built field by field, never from the row.
 
-/** Every loan (approved or returned request), newest first. A page can come back short or empty. */
+/** Every loan (an approved, picked-up or returned request), newest first. A page can come back short or empty. */
 export const listLoans = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, { paginationOpts }) => {
@@ -15,7 +15,9 @@ export const listLoans = query({
     const result = await ctx.db
       .query("requests")
       .order("desc")
-      .filter((q) => q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "returned")))
+      .filter((q) =>
+        q.or(q.eq(q.field("status"), "approved"), q.eq(q.field("status"), "pickedUp"), q.eq(q.field("status"), "returned")),
+      )
       .paginate(safePaging(paginationOpts));
     const name = async (id: (typeof result.page)[number]["ownerId"]) => (await ctx.db.get("users", id))?.displayName ?? "Unknown neighbor";
     const page = await Promise.all(

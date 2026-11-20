@@ -20,7 +20,7 @@ async function setup() {
     });
     return { owner, borrower, tool };
   });
-  const loan = (status: "pending" | "approved" | "declined" | "returned", endDate: string, who: Id<"users"> = borrower) =>
+  const loan = (status: "pending" | "approved" | "pickedUp" | "declined" | "returned" | "cancelled", endDate: string, who: Id<"users"> = borrower) =>
     t.run((ctx) =>
       ctx.db.insert("requests", { toolId: tool, toolName: "Drill", ownerId: owner, borrowerId: who, startDate: "2026-01-01", endDate, status }),
     );
@@ -48,10 +48,18 @@ describe("reminders.overdue", () => {
     expect((await overdue()).map((l) => l.requestId)).toEqual([id]);
   });
 
-  test("pending, declined and returned requests are never listed", async () => {
+  test("pending, declined, cancelled and returned requests are never listed", async () => {
     const { loan, overdue } = await setup();
-    for (const status of ["pending", "declined", "returned"] as const) await loan(status, "2026-06-01");
+    for (const status of ["pending", "declined", "cancelled", "returned"] as const) await loan(status, "2026-06-01");
     expect(await overdue()).toEqual([]);
+  });
+
+  test("an approved loan and a picked-up loan past their end date are both listed", async () => {
+    const { loan, overdue } = await setup();
+    const approved = await loan("approved", "2026-06-01");
+    const pickedUp = await loan("pickedUp", "2026-06-02");
+    await loan("pickedUp", DAY); // ends today: not overdue
+    expect(new Set((await overdue()).map((l) => l.requestId))).toEqual(new Set([approved, pickedUp]));
   });
 
   test("a loan already reminded for the day is not listed, but is again the next day", async () => {

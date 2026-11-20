@@ -4,17 +4,20 @@ import { internalMutation, internalQuery } from "./_generated/server";
 // Internal only: called by the signed HTTP routes in http.ts for the daily n8n reminder workflow.
 
 /**
- * Approved loans whose end date is before `day` (YYYY-MM-DD, UTC) and that have no reminder for `day`.
+ * Approved and picked-up loans whose end date is before `day` (YYYY-MM-DD, UTC) and that have no reminder for `day`.
+ * An approved loan counts too: the borrower may have the tool and not have confirmed the pickup.
  * Items are built field by field: only what the reminder needs.
  * Note: reads every overdue loan in one call, fine at neighborhood scale; page it if that stops being true.
  */
 export const overdue = internalQuery({
   args: { day: v.string() },
   handler: async (ctx, { day }) => {
-    const loans = await ctx.db
-      .query("requests")
-      .withIndex("by_status_endDate", (q) => q.eq("status", "approved").lt("endDate", day))
-      .collect();
+    const late = (status: "approved" | "pickedUp") =>
+      ctx.db
+        .query("requests")
+        .withIndex("by_status_endDate", (q) => q.eq("status", status).lt("endDate", day))
+        .collect();
+    const loans = [...(await late("approved")), ...(await late("pickedUp"))];
     const items = await Promise.all(
       loans.map(async ({ _id, toolName, endDate, borrowerId }) => {
         const reminded = await ctx.db

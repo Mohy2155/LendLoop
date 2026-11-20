@@ -20,11 +20,16 @@ export async function queueNotification(
     endDate: string;
     ownerId: Id<"users">;
     borrowerId: Id<"users">;
+    cancelledBy?: "owner" | "borrower"; // set for a cancel only
   },
 ): Promise<void> {
   const name = async (id: Id<"users">) => (await ctx.db.get("users", id))?.displayName ?? "Unknown neighbor";
-  const { status, toolName, startDate, endDate } = request;
+  const { status, toolName, startDate, endDate, cancelledBy } = request;
   const payload: Payload = { status, toolName, startDate, endDate, borrowerName: await name(request.borrowerId) };
-  if (status === "pending") payload.ownerName = await name(request.ownerId);
+  // The owner is addressed (so their name is sent) for a new request, a pickup and a cancel by the borrower.
+  if (status === "pending" || status === "pickedUp" || (status === "cancelled" && cancelledBy === "borrower")) {
+    payload.ownerName = await name(request.ownerId);
+  }
+  if (status === "cancelled") payload.cancelledBy = cancelledBy;
   await ctx.scheduler.runAfter(0, internal.notify.send, { payload, attempt: 1 });
 }
