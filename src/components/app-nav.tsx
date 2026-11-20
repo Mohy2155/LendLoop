@@ -26,7 +26,7 @@ export function AppNav() {
 
   return (
     <nav aria-label="Main" className="border-b border-border">
-      <ul ref={row} className="tab-scroll mx-auto flex w-full max-w-5xl gap-1 px-4 sm:px-6">
+      <ul ref={row} className="tab-scroll mx-auto flex w-full max-w-7xl gap-1 px-4 sm:px-6">
         {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
           const exact = pathname === item.href;
           const child = !exact && pathname.startsWith(`${item.href}/`);

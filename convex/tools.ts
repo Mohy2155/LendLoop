@@ -236,7 +236,7 @@ export const listAll = query({
       : ctx.db.query("tools");
     const result = await tools.order("desc").paginate(safePaging(paginationOpts));
     const page = await Promise.all(
-      result.page.map(async ({ _id, name, category, condition, description, photos }) => {
+      result.page.map(async ({ _id, ownerId, name, category, condition, description, photos }) => {
         const state = await toolState(ctx, _id);
         return {
           _id,
@@ -246,6 +246,7 @@ export const listAll = query({
           description,
           availability: state.onLoan ? ("onLoan" as const) : state.reserved ? ("reserved" as const) : ("available" as const),
           requested: await hasOpenRequest(ctx, _id, user._id), // the caller's own request only
+          isMine: ownerId === user._id, // a yes or no; the owner's identity is never returned
           photoUrl: photos?.[0] ? await ctx.storage.getUrl(photos[0]) : null,
         };
       }),
