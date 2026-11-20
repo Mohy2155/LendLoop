@@ -9,12 +9,18 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as http from "../http.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_day from "../lib/day.js";
+import type * as lib_lastReminder from "../lib/lastReminder.js";
 import type * as lib_notify from "../lib/notify.js";
 import type * as lib_notifyPayload from "../lib/notifyPayload.js";
 import type * as lib_paging from "../lib/paging.js";
+import type * as lib_reminderText from "../lib/reminderText.js";
+import type * as lib_signedRequest from "../lib/signedRequest.js";
 import type * as lib_toolOptions from "../lib/toolOptions.js";
 import type * as notify from "../notify.js";
+import type * as reminders from "../reminders.js";
 import type * as requests from "../requests.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
@@ -27,12 +33,18 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  http: typeof http;
   "lib/access": typeof lib_access;
+  "lib/day": typeof lib_day;
+  "lib/lastReminder": typeof lib_lastReminder;
   "lib/notify": typeof lib_notify;
   "lib/notifyPayload": typeof lib_notifyPayload;
   "lib/paging": typeof lib_paging;
+  "lib/reminderText": typeof lib_reminderText;
+  "lib/signedRequest": typeof lib_signedRequest;
   "lib/toolOptions": typeof lib_toolOptions;
   notify: typeof notify;
+  reminders: typeof reminders;
   requests: typeof requests;
   tools: typeof tools;
   users: typeof users;

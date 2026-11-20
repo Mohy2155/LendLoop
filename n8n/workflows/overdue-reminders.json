@@ -1,0 +1,212 @@
+{
+  "id": "LendLoopReminders",
+  "name": "Overdue reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "name": "Every day at 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Signs the GET: HMAC-SHA256 over \"<timestamp>.GET.<path>.<body>\" (the body is empty).\nconst secret = $env.LENDLOOP_WEBHOOK_SECRET;\nif (!secret || !$env.CONVEX_SITE_URL) throw new Error('LENDLOOP_WEBHOOK_SECRET and CONVEX_SITE_URL must both be set');\nconst crypto = require('crypto');\nconst timestamp = String(Date.now());\nconst signature = crypto.createHmac('sha256', secret).update(timestamp + '.GET./overdue-loans.').digest('hex');\nreturn [{ json: { timestamp, signature } }];"
+      },
+      "name": "Sign request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CONVEX_SITE_URL.replace(/\\/+$/, '') }}/overdue-loans",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-lendloop-timestamp",
+              "value": "={{ $('Sign request').item.json.timestamp }}"
+            },
+            {
+              "name": "x-lendloop-signature",
+              "value": "={{ $('Sign request').item.json.signature }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Fetch overdue loans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per overdue loan, each carrying the day the list was made for.\nconst { day, loans } = $input.first().json;\nif (!Array.isArray(loans) || typeof day !== 'string') throw new Error('Unexpected response from the overdue-loans endpoint');\nreturn loans.map((loan) => ({ json: { ...loan, day } }));"
+      },
+      "name": "One item per loan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Logged mock reminder. Uses only the fields the endpoint returned.\nreturn $input.all().map(({ json: loan }) => {\n  const to = loan.borrowerName;\n  const text = 'Your loan of ' + loan.toolName + ' was due back on ' + loan.endDate + '. Please return it.';\n  console.log('[reminder] to ' + to + ': ' + text);\n  return { json: { ...loan, to, text } };\n});"
+      },
+      "name": "Reminder message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Signs the write-back. The exact body string is signed here and sent as-is by the next node.\nconst crypto = require('crypto');\nconst secret = $env.LENDLOOP_WEBHOOK_SECRET;\nif (!secret) throw new Error('LENDLOOP_WEBHOOK_SECRET is not set');\nreturn $input.all().map(({ json: loan }) => {\n  const body = JSON.stringify({ requestId: loan.requestId, day: loan.day });\n  const timestamp = String(Date.now());\n  const signature = crypto.createHmac('sha256', secret).update(timestamp + '.POST./reminders.' + body).digest('hex');\n  return { json: { body, timestamp, signature } };\n});"
+      },
+      "name": "Sign write-back",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONVEX_SITE_URL.replace(/\\/+$/, '') }}/reminders",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-lendloop-timestamp",
+              "value": "={{ $('Sign write-back').item.json.timestamp }}"
+            },
+            {
+              "name": "x-lendloop-signature",
+              "value": "={{ $('Sign write-back').item.json.signature }}"
+            }
+          ]
+        },
+        "options": {},
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}"
+      },
+      "name": "Write back reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Every day at 09:00": {
+      "main": [
+        [
+          {
+            "node": "Sign request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign request": {
+      "main": [
+        [
+          {
+            "node": "Fetch overdue loans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch overdue loans": {
+      "main": [
+        [
+          {
+            "node": "One item per loan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per loan": {
+      "main": [
+        [
+          {
+            "node": "Reminder message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder message": {
+      "main": [
+        [
+          {
+            "node": "Sign write-back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign write-back": {
+      "main": [
+        [
+          {
+            "node": "Write back reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "LendLoopErrors01"
+  },
+  "pinData": {},
+  "active": false
+}

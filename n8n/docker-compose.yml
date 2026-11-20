@@ -9,6 +9,8 @@ services:
       WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
       # Shared secret used to verify the signature on every webhook call.
       LENDLOOP_WEBHOOK_SECRET: ${LENDLOOP_WEBHOOK_SECRET}
+      # Convex HTTP site (the .convex.site URL, no trailing slash) the reminder workflow calls.
+      CONVEX_SITE_URL: ${CONVEX_SITE_URL}
       # The verify step reads the secret with $env and uses Node's crypto module.
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       NODE_FUNCTION_ALLOW_BUILTIN: crypto

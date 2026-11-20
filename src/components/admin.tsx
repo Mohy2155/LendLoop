@@ -6,7 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { PAGE_SIZE } from "../../convex/lib/paging";
 import { quietButton } from "./button-styles";
-import { requestMessage } from "./requests";
+import { ReminderLine, requestMessage } from "./requests";
 import { Empty, Loading, LoadMore, pill } from "./tool-board";
 
 function Loans() {
@@ -28,6 +28,7 @@ function Loans() {
                 <span className="sr-only">Status: </span>
                 {loan.status}
               </span>
+              <ReminderLine at={loan.lastReminderAt} />
             </p>
           </li>
         ))}

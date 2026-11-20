@@ -2,6 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin } from "./lib/access";
+import { lastReminderAt } from "./lib/lastReminder";
 import { safePaging } from "./lib/paging";
 
 // Every function here starts with requireAdmin. Items are built field by field, never from the row.
@@ -26,6 +27,7 @@ export const listLoans = query({
         status,
         ownerName: await name(ownerId),
         borrowerName: await name(borrowerId),
+        lastReminderAt: await lastReminderAt(ctx, _id),
       })),
     );
     return { ...result, page };
